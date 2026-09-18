@@ -27,6 +27,15 @@ form.
   services in the Compose project, returning an error if a service does not
   exist rather than silently doing nothing. (by @pikeas, @jochumdev, #221)
 
+### Added
+
+- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
+  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
+  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
+  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
+  over manual connection settings; otherwise, manual connection takes precedence
+  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
+
 ## [v1.3.4] - 2026-09-17
 
 ### Added
