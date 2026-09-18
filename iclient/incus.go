@@ -64,16 +64,6 @@ func NewConnection(info *ConfigRemoteInfo) (*Connection, error) {
 		return nil, fmt.Errorf("%q: %w", info.Name, ErrConnectionNoAddress)
 	}
 
-	var expectedFingerprint string
-	if info.ServerFingerprint != "" {
-		expectedFingerprint = strings.ReplaceAll(info.ServerFingerprint, ":", "")
-		var hexErr error
-		_, hexErr = hex.DecodeString(expectedFingerprint)
-		if hexErr != nil || len(expectedFingerprint) != 64 {
-			return nil, fmt.Errorf("%q: invalid server certificate fingerprint: must be 64-character SHA-256 hex string", info.Name)
-		}
-	}
-
 	c := &Connection{
 		userAgent:    info.UserAgent,
 		serverCert:   info.ServerCert,
@@ -99,6 +89,16 @@ func NewConnection(info *ConfigRemoteInfo) (*Connection, error) {
 		c.http = &http.Client{Transport: transport}
 
 		return c, nil
+	}
+
+	var expectedFingerprint string
+	if info.ServerFingerprint != "" {
+		expectedFingerprint = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(info.ServerFingerprint), ":", ""))
+		var hexErr error
+		_, hexErr = hex.DecodeString(expectedFingerprint)
+		if hexErr != nil || len(expectedFingerprint) != 64 {
+			return nil, fmt.Errorf("%q: invalid server certificate fingerprint: must be 64-character SHA-256 hex string", info.Name)
+		}
 	}
 
 	tlsConfig, err := incusTLS.GetTLSConfigMem(info.ClientCert, info.ClientKey, info.ClientCA, info.ServerCert, info.InsecureSkipVerify)

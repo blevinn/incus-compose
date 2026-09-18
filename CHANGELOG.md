@@ -38,6 +38,7 @@ form.
   `x-incus-compose.uplink` (or `parent`) extension to configure uplink networks.
   Existing projects and servers without OVN continue to use bridge networks. (by
   @jochumdev)
+
 - Service-name and alias DNS resolution now works on OVN networks. incus-compose
   peers each project network to the shared `ic-dns` and scopes it with a hidden
   network ACL, so service names and network aliases resolve with no compose
@@ -45,10 +46,12 @@ form.
   prevent contested collisions in `ic-dns`. OVN networks also get a default ACL
   posture matching docker compose: instances on the same network reach each
   other, nothing else may initiate in, outbound is allowed. (by @jochumdev)
+
 - `--no-dns` / `INCUS_COMPOSE_NO_DNS` flag on `up` and `down`, and
   `x-incus-compose.dns.disabled` compose option to opt out of DNS sidecar
   creation/configuration on `up` and stop/removal of project-scoped sidecars on
   `down`. (by @jochumdev)
+
 - `ic-dns`: A new split-horizon authoritative DNS daemon for Incus instances,
   built on the new `ievent` event framework and CoreDNS. Resolves instance names
   dynamically within per-project or shared zones (`.incus`), serving records
@@ -58,17 +61,22 @@ form.
   endpoints on `:9153` (or `--http`). Projects opt in via `--project-marker`
   (defaulting to `user.label.dns.scope=global`), an explicit `--project` list,
   or serve all visible projects with `--project-marker ""`. (by @jochumdev)
+
 - `ievent`: A pluggable event pipeline framework for Incus lifecycle events,
   processing daemon event streams through ordered, composable plugins (`source`,
   `debounce`, `enricher`, `checker`, `dns`, `http`, `log`). (by @jochumdev)
+
 - ic-healthd serves `/metrics`, `/health` and `/ready` on `:9153`; an empty
   `--http-address` / `INCUS_COMPOSE_HEALTHD_HTTP_ADDRESS` disables it. (by
   @jochumdev)
+
 - `--metrics` / `INCUS_COMPOSE_HEALTHD_METRICS` flag to record Prometheus
   metrics in ic-healthd (defaults to true). (by @jochumdev)
+
 - Running ic-healthd by hand can now present an already-trusted certificate
   (`--client-cert` with `--client-key`) or connect as a remote from the Incus
   CLI configuration (`--remote` with `--use-remote`). (by @jochumdev)
+
 - Support for Compose Specification lifecycle hooks (`pre_start` and
   `post_start`) on services. `pre_start` runs ephemeral init containers sharing
   the service's volumes and tmpfs mounts before the main service starts,
@@ -78,9 +86,17 @@ form.
   non-interactively inside the running service container after startup and
   before healthcheck evaluation, supporting `command`, `user`, `privileged`,
   `working_dir`, and `environment`. (by @jochumdev)
+
 - Configurable tools volume, mount path, and sleep helper image options on
   `client.GlobalClient` (`ClientToolsVolume`, `ClientToolsMount`,
   `ClientSleepImage`). (by @jochumdev)
+
+- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
+  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
+  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
+  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
+  over manual connection settings; otherwise, manual connection takes precedence
+  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
 
 ### Changed
 
