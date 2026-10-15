@@ -166,6 +166,11 @@ form.
   services in the Compose project, returning an error if a service does not
   exist rather than silently doing nothing. (by @pikeas, @jochumdev, #221)
 
+- Containers on Incus < 7.6 now set `lxc.environment.hooks` via `raw.lxc` to
+  override `PATH` for LXC hooks running on the host, fixing containers whose
+  image `PATH` does not match the host's (such as
+  `ghcr.io/nix-containers/images/*`). (by @jochumdev)
+
 ## [v1.3.4] - 2026-09-17
 
 ### Fixed
