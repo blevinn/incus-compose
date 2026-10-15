@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -580,4 +582,76 @@ func TestStorageVolumePrefetchMissingPath(t *testing.T) {
 	entries, err := sc.ReadDir("/")
 	require.NoError(t, err)
 	assert.Empty(t, entries)
+}
+
+func TestStorageVolumeHostPathReseed(t *testing.T) {
+	t.Parallel()
+	skipLocal(t)
+
+	ctx := t.Context()
+	c := newRandomTestClient(t, "volume-hostpath-")
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("v1"), 0o644))
+
+	volRes, err := c.Resource(KindStorageVolume, "seed-dir", &StorageVolumeConfig{
+		HostPath: dir,
+	})
+	require.NoError(t, err)
+
+	vol, ok := volRes.(*StorageVolume)
+	require.True(t, ok)
+
+	// Ensure creates the volume; Start seeds it from HostPath.
+	require.NoError(t, RunAction(ctx, volRes, ActionEnsure, OptionCreate()))
+	require.True(t, vol.Created())
+	require.NoError(t, RunAction(ctx, volRes, ActionStart))
+
+	sc, err := vol.SFTP(ctx)
+	require.NoError(t, err)
+
+	defer func() { _ = sc.Close() }()
+
+	readVolumeFile := func(path string) string {
+		t.Helper()
+
+		f, openErr := sc.Open(path)
+		require.NoError(t, openErr)
+
+		defer func() { _ = f.Close() }()
+
+		b, readErr := io.ReadAll(f)
+		require.NoError(t, readErr)
+
+		return string(b)
+	}
+
+	assert.Equal(t, "v1", readVolumeFile("/index.html"))
+
+	// Write an extra file inside the volume that does not exist on the host.
+	extra, err := sc.Create("/extra.txt")
+	require.NoError(t, err)
+	_, err = extra.Write([]byte("keep-me"))
+	require.NoError(t, err)
+	require.NoError(t, extra.Close())
+
+	// Update the host file and add a new host file.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("v2-updated"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.html"), []byte("new-file"), 0o644))
+
+	// Ensure only fetches the volume and must not re-seed.
+	require.NoError(t, RunAction(ctx, volRes, ActionEnsure, OptionCreate()))
+	assert.False(t, vol.Created())
+	assert.Equal(t, "v1", readVolumeFile("/index.html"))
+
+	// Start re-seeds the volume, overwriting index.html and keeping extra.txt.
+	require.NoError(t, RunAction(ctx, volRes, ActionStart))
+	assert.Equal(t, "v2-updated", readVolumeFile("/index.html"))
+	assert.Equal(t, "new-file", readVolumeFile("/new.html"))
+	assert.Equal(t, "keep-me", readVolumeFile("/extra.txt"))
+
+	// Missing HostPath fails with ErrCreate on Start.
+	vol.Config.HostPath = filepath.Join(dir, "does-not-exist")
+	err = RunAction(ctx, volRes, ActionStart)
+	require.ErrorIs(t, err, ErrCreate)
 }
