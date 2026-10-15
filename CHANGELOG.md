@@ -134,6 +134,10 @@ form.
   subcommands (`up`, `run`, `pull`, `healthd up`/`down`, `dns up`). Images are
   resolved centrally on initialization. (by @jochumdev)
 
+- Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
+  volume on every `up`, overwriting matching files in the target while leaving
+  other files in the volume untouched. (by @jochumdev)
+
 ### Removed
 
 - `ic-healthd`: Remove deprecated `user.healthcheck.ignore`
@@ -153,9 +157,11 @@ form.
   flushing was only triggered during instance address registration, which was
   skipped when the container name matched the service name. (by @Tofil,
   @jochumdev, #206)
+
 - `down --rmi` now validates its argument (`local` or `all`), preventing
   subsequent flags (such as `--volumes`) or invalid values from being silently
   consumed. (by @pikeas, @jochumdev, #220)
+
 - `down` now validates service names passed as arguments against declared
   services in the Compose project, returning an error if a service does not
   exist rather than silently doing nothing. (by @pikeas, @jochumdev, #221)

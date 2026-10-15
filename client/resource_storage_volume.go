@@ -40,7 +40,7 @@ type StorageVolumeConfig struct {
 	// needed if shifting is true.
 	ImageResource Resource
 
-	// HostPath, when set, seeds the volume with the local directory contents on first creation.
+	// HostPath, when set, seeds the volume with the local directory contents on Start.
 	HostPath string
 
 	// Prefetch, when set, fills the volume on first creation with what
@@ -207,51 +207,52 @@ func (r *StorageVolume) get(ctx context.Context) error {
 	return nil
 }
 
-// Start validates the storage volume.
+// Start validates and seeds the storage volume.
 func (r *StorageVolume) Start(ctx context.Context, _ ...Option) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !r.IsEnsured() || !r.Config.Shifted {
+	if !r.IsEnsured() {
 		return nil
 	}
 
 	// If the user overwrites security.shifted do not validate against the image.
-	_, ok := r.Config.Extensions["security.shifted"]
-	if ok {
-		return nil
+	_, hasShiftedConfig := r.Config.Extensions["security.shifted"]
+	if r.Config.Shifted && !hasShiftedConfig {
+		var errs error
+
+		// Check shifted is enabled
+		volume := r.State().IncusVolume
+		if !util.IsTrue(volume.Config["security.shifted"]) {
+			errs = errors.Join(errors.New("expected security.shifted=true"))
+		}
+
+		owner, err := r.resolveUser(ctx)
+		if err != nil {
+			return errors.Join(errs, err)
+		}
+
+		expectedUID := strconv.FormatUint(owner.UID, 10)
+		expectedGID := strconv.FormatUint(owner.GID, 10)
+
+		if volume.Config["initial.uid"] != expectedUID {
+			errs = errors.Join(errs, fmt.Errorf("UID mismatch, expected %s got %s", expectedUID, volume.Config["initial.uid"]))
+		}
+
+		if volume.Config["initial.gid"] != expectedGID {
+			errs = errors.Join(errs, fmt.Errorf("GID mismatch, expected %s got %s", expectedGID, volume.Config["initial.gid"]))
+		}
+
+		if errs != nil {
+			return ErrVolumeMismatch.Wrap(errs)
+		}
 	}
 
-	// if r.Config.ImageResource == nil {
-	// 	return ErrVolumeMismatch.WithText("no image resource given")
-	// }
-
-	var errs error
-
-	// Check shifted is enabled
-	volume := r.State().IncusVolume
-	if !util.IsTrue(volume.Config["security.shifted"]) {
-		errs = errors.Join(errors.New("expected security.shifted=true"))
-	}
-
-	owner, err := r.resolveUser(ctx)
-	if err != nil {
-		return errors.Join(errs, err)
-	}
-
-	expectedUID := strconv.FormatUint(owner.UID, 10)
-	expectedGID := strconv.FormatUint(owner.GID, 10)
-
-	if volume.Config["initial.uid"] != expectedUID {
-		errs = errors.Join(errs, fmt.Errorf("UID mismatch, expected %s got %s", expectedUID, volume.Config["initial.uid"]))
-	}
-
-	if volume.Config["initial.gid"] != expectedGID {
-		errs = errors.Join(errs, fmt.Errorf("GID mismatch, expected %s got %s", expectedGID, volume.Config["initial.gid"]))
-	}
-
-	if errs != nil {
-		return ErrVolumeMismatch.Wrap(errs)
+	if r.Config.HostPath != "" {
+		err := r.pushContent(ctx)
+		if err != nil {
+			return ErrCreate.WithText("seeding volume from " + r.Config.HostPath).Wrap(err)
+		}
 	}
 
 	return nil
@@ -342,15 +343,6 @@ func (r *StorageVolume) create(ctx context.Context) error {
 
 	r.state.Store(&StorageVolumeState{IncusVolume: &volume.StorageVolume, ETag: eTag, Created: true})
 
-	if r.Config.HostPath != "" {
-		err := r.pushDirectoryContent(ctx)
-		if err != nil {
-			return ErrCreate.WithText("seeding volume from " + r.Config.HostPath).Wrap(err)
-		}
-
-		return nil
-	}
-
 	if r.Config.Prefetch != "" {
 		err := r.prefetch(ctx)
 		if err != nil {
@@ -368,9 +360,9 @@ func (r *StorageVolume) create(ctx context.Context) error {
 	return nil
 }
 
-// pushDirectoryContent walks HostPath and copies every file and directory into
-// the volume over SFTP. Only called on first creation.
-func (r *StorageVolume) pushDirectoryContent(ctx context.Context) error {
+// pushContent walks HostPath and copies every file and directory into
+// the volume over SFTP.
+func (r *StorageVolume) pushContent(ctx context.Context) error {
 	sftpConn, err := r.SFTP(ctx)
 	if err != nil {
 		return err
