@@ -43,6 +43,12 @@ form.
   over manual connection settings; otherwise, manual connection takes precedence
   over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
 
+- Support for pass-through bind mounts on remote Incus servers via the inline
+  volume extension `x-incus-compose.remote: true` or the global
+  `--allow-remote-mounts` (`INCUS_COMPOSE_ALLOW_REMOTE_MOUNTS`) flag. Both skip
+  the same-host and local `os.Stat` checks so the source path is resolved on the
+  remote Incus host. (by @jochumdev)
+
 ### Changed
 
 - Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the

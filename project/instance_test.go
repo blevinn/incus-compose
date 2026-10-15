@@ -1937,11 +1937,45 @@ func TestInstanceVolumeDevices(t *testing.T) {
 
 	t.Run("missing bind source", func(t *testing.T) {
 		t.Parallel()
-		service := types.ServiceConfig{Name: "web", Volumes: []types.ServiceVolumeConfig{
+		service := types.ServiceConfig{Name: "web", ContainerSpec: types.ContainerSpec{Volumes: []types.ServiceVolumeConfig{
 			{Type: "bind", Source: filepath.Join(t.TempDir(), "nope"), Target: "/m"},
-		}}
+		}}}
 		_, _, _, err := instanceVolumeDevices(c, &types.Project{}, service, nil, "")
 		require.Error(t, err)
+	})
+
+	t.Run("remote bind mount skips local stat", func(t *testing.T) {
+		t.Parallel()
+		src := filepath.Join(t.TempDir(), "remote-only")
+		service := types.ServiceConfig{Name: "web", ContainerSpec: types.ContainerSpec{Volumes: []types.ServiceVolumeConfig{
+			{
+				Type: "bind", Source: src, Target: "/m",
+				Extensions: types.Extensions{"x-incus-compose": map[string]any{"remote": true}},
+			},
+		}}}
+		devices, files, resources, err := instanceVolumeDevices(c, &types.Project{}, service, nil, "")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+		assert.Empty(t, resources)
+		require.Len(t, devices, 1)
+		assert.Equal(t, src, devices[0].Config.Disk.Source)
+		assert.Equal(t, "/m", devices[0].Config.Disk.Path)
+	})
+
+	t.Run("allow-remote-mounts client option skips local stat", func(t *testing.T) {
+		t.Parallel()
+		rc := client.NewOfflineClient(t.Context(), "test-remote", client.ClientAllowRemoteMounts(true))
+		src := filepath.Join(t.TempDir(), "remote-only")
+		service := types.ServiceConfig{Name: "web", ContainerSpec: types.ContainerSpec{Volumes: []types.ServiceVolumeConfig{
+			{Type: "bind", Source: src, Target: "/m"},
+		}}}
+		devices, files, resources, err := instanceVolumeDevices(rc, &types.Project{}, service, nil, "")
+		require.NoError(t, err)
+		assert.Empty(t, files)
+		assert.Empty(t, resources)
+		require.Len(t, devices, 1)
+		assert.Equal(t, src, devices[0].Config.Disk.Source)
+		assert.Equal(t, "/m", devices[0].Config.Disk.Path)
 	})
 }
 
