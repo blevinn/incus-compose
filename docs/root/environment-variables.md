@@ -169,11 +169,21 @@ destructive or a no-op instead of just changing cosmetic output:
 
 ### Incus Connection
 
-| Variable                     | Flag             | Description                                                                                                                                                                                                         |
-| ---------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `INCUS_REMOTE`               | `--remote`       | Incus remote name from CLI config (e.g., `local`, `myserver`)                                                                                                                                                       |
-| `INCUS_COMPOSE_IMAGE_CACHE`  | `--image-cache`  | Incus project used as image cache (`INCUS_COMPOSE_IMAGE_CACHE`, default: `incus-compose-cache`); set `""` to disable caching and pull straight into the project, see [CLI Reference](/cli-reference#global-options) |
-| `INCUS_COMPOSE_STORAGE_POOL` | `--storage-pool` | Default storage pool (default: `detect`)                                                                                                                                                                            |
+| Variable                     | Flag                   | Description                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INCUS_REMOTE`               | `--remote`             | Incus remote name from CLI config (e.g., `local`, `myserver`)                                                                                                                                                       |
+| `INCUS_SERVER_URL`           | `--server-url`         | Direct HTTPS endpoint to connect to (e.g., `https://192.168.1.10:8443`)                                                                                                                                             |
+| `INCUS_CLIENT_CERT_FILE`     | `--client-cert-file`   | Path to client certificate file (required with `--server-url`)                                                                                                                                                      |
+| `INCUS_CLIENT_KEY_FILE`      | `--client-key-file`    | Path to client key file (required with `--server-url`)                                                                                                                                                              |
+| `INCUS_SERVER_FINGERPRINT`   | `--server-fingerprint` | Pinned server certificate SHA-256 fingerprint (required with `--server-url`)                                                                                                                                        |
+| `INCUS_COMPOSE_IMAGE_CACHE`  | `--image-cache`        | Incus project used as image cache (`INCUS_COMPOSE_IMAGE_CACHE`, default: `incus-compose-cache`); set `""` to disable caching and pull straight into the project, see [CLI Reference](/cli-reference#global-options) |
+| `INCUS_COMPOSE_STORAGE_POOL` | `--storage-pool`       | Default storage pool (default: `detect`)                                                                                                                                                                            |
+
+An explicit `--remote` CLI flag takes precedence over `--server-url` /
+`INCUS_SERVER_URL`. Otherwise, `INCUS_SERVER_URL` takes precedence over
+`INCUS_REMOTE` or the default Incus remote.
+
+_Direct server connection (`--server-url`) since: v1.3.5_
 
 ### Display and Debugging
 

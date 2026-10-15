@@ -252,13 +252,16 @@ services:
 The source is read by incus-compose, on the machine you run it from, and must
 exist there. What happens next depends on what it is:
 
-- **A directory** becomes a custom storage volume, filled from the directory
-  when the volume is **created**. Later changes on your machine do not
-  propagate: the volume goes its own way from there, and `up` will not re-seed
-  it. Delete the volume to start over.
+- **A directory** becomes a custom storage volume, filled from the directory on
+  **every `up`**, overwriting matching files in the volume while leaving any
+  other files there untouched.
 - **A single file** is pushed into the instance on **every start**, while it is
   still stopped, overwriting what is there. Handy for a config or a key you want
   refreshed each time.
+
+> **Warning:** Changed in v1.3.5. Directory volumes are now re-seeded on every
+> `up`, overwriting matching files in the target. Earlier versions only seeded
+> the volume when it was first created.
 
 Seeding is a copy, in one direction. Nothing written inside the container comes
 back out, so it does not replace a named volume for data you mean to keep.

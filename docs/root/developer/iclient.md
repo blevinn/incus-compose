@@ -52,8 +52,9 @@ info, err := config.RemoteInfos("my-remote") // everything needed to dial it
 conn, err := iclient.NewConnection(info)     // the connection
 ```
 
-`client.DialRemote(path, remote)` is those three lines, and is what the CLI and
-the tests use. An empty remote means the configuration's default. An `oci`
+These three lines are what the CLI and the tests use when dialing a configured
+remote (or `iclient.NewConnection` directly with a `ConfigRemoteInfo` for
+`--server-url`). An empty remote means the configuration's default. An `oci`
 remote has no daemon to dial; its `info` goes to
 [`NewRepository`](#reading-an-images-config) instead.
 

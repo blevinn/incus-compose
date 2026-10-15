@@ -15,12 +15,6 @@ form.
 
 ### Added
 
-- `ievent/enricher`: Add optional
-  `enricher.Instance(func(*incusapi.Instance) bool)` option alongside
-  `enricher.Project` to allow consumers to filter instances early based on
-  instance metadata or labels, skipping state reads, IP timeout polling, and
-  downstream event emission for ignored instances. (by @jochumdev)
-
 - External networks referencing an unmanaged host network (such as an unmanaged
   bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
   translated to `nictype: bridged` (or `physical` / `macvlan`) with
