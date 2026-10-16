@@ -121,7 +121,7 @@ func (c *Client) RegisterDNSWatcher() error {
 					return nil
 				}
 				st := net.State()
-				if st != nil && st.IncusNetwork != nil && st.IncusNetwork.Type == "ovn" {
+				if st != nil && st.IncusNetwork != nil && (st.IncusNetwork.Type == "ovn" || !st.IncusNetwork.Managed) {
 					return nil
 				}
 
