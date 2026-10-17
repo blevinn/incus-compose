@@ -49,6 +49,13 @@ form.
   the same-host and local `os.Stat` checks so the source path is resolved on the
   remote Incus host. (by @jochumdev)
 
+- External networks referencing an unmanaged host network (such as an unmanaged
+  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
+  translated to `nictype: bridged` (or `physical` / `macvlan`) with
+  `parent: <name>` on the instance device instead of `network: <name>`, allowing
+  direct attachment to unmanaged host bridges via standard compose `networks:`
+  declarations. (by @jochumdev)
+
 ### Changed
 
 - Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
