@@ -326,7 +326,12 @@ func (r *Instance) WaitIPs(ctx context.Context, timeout time.Duration) ([]Interf
 				continue
 			}
 
-			ips = append(ips, InterfaceIPs{Network: device["network"], IPv4s: iPv4s, IPv6s: iPv6s})
+			netName := device["network"]
+			if netName == "" {
+				netName = device["parent"]
+			}
+
+			ips = append(ips, InterfaceIPs{Network: netName, IPv4s: iPv4s, IPv6s: iPv6s})
 		}
 
 		if len(ips) > 0 && !r.missingIPv6(ips, networkIpv6) {
@@ -666,6 +671,19 @@ func (r *Instance) create(ctx context.Context, opts ...Option) error {
 	// Copy users project / x-incus config.
 	// This is after all our configs so we allow users to override it.
 	maps.Copy(config, r.Config.Extensions)
+
+	// Shim https://github.com/lxc/incus/pull/4128
+	if !r.client.globalClient.HasExtension(shared.Incus76Extension) && r.Config.Type == incusApi.InstanceTypeContainer {
+		raw := config["raw.lxc"]
+		if !strings.Contains(raw, "lxc.environment.hooks") {
+			if raw != "" && !strings.HasSuffix(raw, "\n") {
+				raw += "\n"
+			}
+
+			raw += "lxc.environment.hooks = PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+			config["raw.lxc"] = raw
+		}
+	}
 
 	_, hasStatus := config[HealthStatusKey]
 

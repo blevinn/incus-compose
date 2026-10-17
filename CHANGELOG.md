@@ -20,12 +20,47 @@ form.
   flushing was only triggered during instance address registration, which was
   skipped when the container name matched the service name. (by @Tofil,
   @jochumdev, #206)
+
 - `down --rmi` now validates its argument (`local` or `all`), preventing
   subsequent flags (such as `--volumes`) or invalid values from being silently
   consumed. (by @pikeas, @jochumdev, #220)
+
 - `down` now validates service names passed as arguments against declared
   services in the Compose project, returning an error if a service does not
   exist rather than silently doing nothing. (by @pikeas, @jochumdev, #221)
+
+- Containers on Incus < 7.6 now set `lxc.environment.hooks` via `raw.lxc` to
+  override `PATH` for LXC hooks running on the host, fixing containers whose
+  image `PATH` does not match the host's (such as
+  `ghcr.io/nix-containers/images/*`). (by @jochumdev)
+
+### Added
+
+- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
+  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
+  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
+  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
+  over manual connection settings; otherwise, manual connection takes precedence
+  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
+
+- Support for pass-through bind mounts on remote Incus servers via the inline
+  volume extension `x-incus-compose.remote: true` or the global
+  `--allow-remote-mounts` (`INCUS_COMPOSE_ALLOW_REMOTE_MOUNTS`) flag. Both skip
+  the same-host and local `os.Stat` checks so the source path is resolved on the
+  remote Incus host. (by @jochumdev)
+
+- External networks referencing an unmanaged host network (such as an unmanaged
+  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
+  translated to `nictype: bridged` (or `physical` / `macvlan`) with
+  `parent: <name>` on the instance device instead of `network: <name>`, allowing
+  direct attachment to unmanaged host bridges via standard compose `networks:`
+  declarations. (by @jochumdev)
+
+### Changed
+
+- Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
+  volume on every `up`, overwriting matching files in the target while leaving
+  other files in the volume untouched. (by @jochumdev)
 
 ## [v1.3.4] - 2026-09-17
 

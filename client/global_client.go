@@ -78,6 +78,9 @@ type ClientConfig struct {
 
 	// SystemProject is the project holding the instances the library runs.
 	SystemProject string
+
+	// AllowRemoteMounts permits pass-through bind mounts on a remote Incus server.
+	AllowRemoteMounts bool
 }
 
 // ClientOption is a functional option for configuring the Client.
@@ -133,6 +136,11 @@ func ClientCacheProject(n string) ClientOption {
 // ClientSystemProject sets the project holding the library's own instances.
 func ClientSystemProject(n string) ClientOption {
 	return func(c *ClientConfig) { c.SystemProject = n }
+}
+
+// ClientAllowRemoteMounts permits pass-through bind mounts on a remote Incus server.
+func ClientAllowRemoteMounts(allow bool) ClientOption {
+	return func(c *ClientConfig) { c.AllowRemoteMounts = allow }
 }
 
 // GlobalClient provides a high-level interface to Incus operations.
@@ -279,9 +287,19 @@ func NewTestClient(ctx context.Context) (*GlobalClient, error) {
 
 	slog.DebugContext(ctx, "Connecting", "remote", remote)
 
-	conn, err := DialRemote("", remote)
+	config, err := iclient.ReadConfig("")
 	if err != nil {
-		return nil, err
+		return nil, ErrConnectionFailed.Wrap(err)
+	}
+
+	info, err := config.RemoteInfos(remote)
+	if err != nil {
+		return nil, ErrConnectionFailed.Wrap(err)
+	}
+
+	conn, err := iclient.NewConnection(info)
+	if err != nil {
+		return nil, ErrConnectionFailed.Wrap(err)
 	}
 
 	opts := []ClientOption{ClientProvideConnection(conn)}
@@ -310,8 +328,8 @@ func NewTestClient(ctx context.Context) (*GlobalClient, error) {
 
 // NewOfflineClient creates a disconnected project client for resource planning.
 // It can create in-memory resources, but cannot run Incus operations.
-func NewOfflineClient(ctx context.Context, projectName string) *Client {
-	gc := New(ctx)
+func NewOfflineClient(ctx context.Context, projectName string, opts ...ClientOption) *Client {
+	gc := New(ctx, opts...)
 	gc.unix = true
 	config := gc.config
 	config.DescriptionFormat = fmt.Sprintf(config.DescriptionFormat, projectName) + ":%s"
@@ -324,27 +342,6 @@ func NewOfflineClient(ctx context.Context, projectName string) *Client {
 		incusProject: SanitizeProjectName(projectName),
 		logger:       gc.logger.With("project", projectName),
 	}
-}
-
-// DialRemote connects to a remote of the Incus CLI configuration at path.
-// An empty path is the default location, an empty remote the default remote.
-func DialRemote(path string, remote string) (*iclient.Connection, error) {
-	config, err := iclient.ReadConfig(path)
-	if err != nil {
-		return nil, ErrConnectionFailed.Wrap(err)
-	}
-
-	info, err := config.RemoteInfos(remote)
-	if err != nil {
-		return nil, ErrConnectionFailed.Wrap(err)
-	}
-
-	conn, err := iclient.NewConnection(info)
-	if err != nil {
-		return nil, ErrConnectionFailed.Wrap(err)
-	}
-
-	return conn, nil
 }
 
 // Connect establishes a connection to the Incus server.
