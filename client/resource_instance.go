@@ -882,6 +882,7 @@ func (r *Instance) Start(ctx context.Context, opts ...Option) error {
 			retry.Attempts(6),
 			retry.Delay(500*time.Millisecond),
 			retry.DelayType(retry.FixedDelay),
+			retry.LastErrorOnly(true),
 		).Do(func() error {
 			running, err := r.client.HealthdRunning()
 			if err != nil {
