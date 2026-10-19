@@ -68,9 +68,9 @@ func (r *Image) ociStoreConfig(ctx context.Context, server *iclient.Connection, 
 	if config != nil {
 		ociStateFromConfig(state, config)
 	} else {
-		// The presence of oci.volumes is what marks the config as already read.
-		_, stored := img.Properties["oci.volumes"]
-		if stored || r.source == nil || r.source.info.Protocol != "oci" {
+		// The presence of oci.volumes and oci.path is what marks the config as already read.
+		_, storedVol := img.Properties["oci.volumes"]
+		if storedVol || r.source == nil || r.source.info.Protocol != "oci" {
 			return nil
 		}
 

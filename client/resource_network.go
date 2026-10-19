@@ -582,8 +582,8 @@ func (r *Network) updateDNSAliases(ctx context.Context, ownedServices []string, 
 			return fmt.Errorf("reading network %q: %w", r.Name(), readErr)
 		}
 
-		if net.Type != "bridge" {
-			r.client.LogDebug("skipping service DNS records: network is not a bridge", "network", r.Name(), "type", net.Type)
+		if net.Type != "bridge" || !net.Managed {
+			r.client.LogDebug("skipping service DNS records: network is not a managed bridge", "network", r.Name(), "type", net.Type)
 			return nil
 		}
 

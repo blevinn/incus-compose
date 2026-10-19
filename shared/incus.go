@@ -5,4 +5,5 @@ const (
 	Incus72Extension = "oci_network_config"
 	Incus73Extension = "instance_port_forward"
 	Incus75Extension = "gpu_physical_clique"
+	Incus76Extension = "certificate_ca_trust"
 )

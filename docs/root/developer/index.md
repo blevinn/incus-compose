@@ -162,19 +162,24 @@ enrichment.
 
 ## Connection Modes
 
-The CLI dials a remote of the Incus CLI configuration: `--remote`, else
-`INCUS_REMOTE`, else the configured default.
+The CLI dials either a remote from the Incus CLI configuration (`--remote`, else
+`INCUS_REMOTE`, else the configured default) or a direct HTTPS endpoint when
+`--server-url` (`INCUS_SERVER_URL`) is set along with `--client-cert-file`,
+`--client-key-file` and `--server-fingerprint`. An explicit `--remote` flag
+takes precedence over `--server-url`; otherwise `--server-url` takes precedence
+over `INCUS_REMOTE` or the default remote.
 
 ```bash
 incus remote add ci https://192.168.1.100:8443
 incus-compose --remote ci up
 ```
 
-`client.New` also takes a connection built elsewhere. `DialRemote` is the same
-path the CLI takes; anything reachable through `iclient` works.
+`client.New` takes a connection built through `iclient`:
 
 ```go
-conn, err := client.DialRemote("", "ci")
+cfg, err := iclient.ReadConfig("")
+info, err := cfg.RemoteInfos("ci")
+conn, err := iclient.NewConnection(info)
 gc := client.New(ctx, client.ClientProvideConnection(conn))
 ```
 

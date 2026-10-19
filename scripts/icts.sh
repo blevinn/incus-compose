@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 # Copyright (c) 2026 René Jochum <rene@jochum.dev>
 # This script is released into the public domain or under CC0-1.0.
 # Use it however you want, no restrictions.
@@ -67,8 +67,8 @@ create_ict() {
   echo "$token"
 
   # On dev01
-  incus --project=default exec dev01 -- sudo -u r3j0 incus remote remove "$name" 2>/dev/null || true
-  incus --project=default exec dev01 -- sudo -u r3j0 incus remote add "$name" "$ip" --accept-certificate --token="${token}"
+  incus --project=default exec dev01 -- sudo -i -u r3j0 incus remote remove "$name" 2>/dev/null || true
+  incus --project=default exec dev01 -- sudo -i -u r3j0 incus remote add "$name" "$ip" --accept-certificate --token="${token}"
 }
 
 delete_ict() {
@@ -81,7 +81,7 @@ delete_ict() {
   incus remote remove "$name" 2>/dev/null || true
 
   # On dev01
-  incus --project=default exec dev01 -- sudo -u r3j0 incus remote remove "$name" 2>/dev/null || true
+  incus --project=default exec dev01 -- sudo -i -u r3j0 incus remote remove "$name" 2>/dev/null || true
 }
 
 up() {

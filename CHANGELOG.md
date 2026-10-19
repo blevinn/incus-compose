@@ -15,18 +15,16 @@ form.
 
 ### Added
 
-- `ievent/enricher`: Add optional
-  `enricher.Instance(func(*incusapi.Instance) bool)` option alongside
-  `enricher.Project` to allow consumers to filter instances early based on
-  instance metadata or labels, skipping state reads, IP timeout polling, and
-  downstream event emission for ignored instances. (by @jochumdev)
+- Disk and tmpfs mount targets that are symlinks in the container rootfs (common
+  in `nix-containers` images such as `/etc/caddy` pointing into `/nix/store`)
+  are now materialized as real directories or files before starting the
+  instance, and recursive directory creation when pushing files now follows
+  existing symlinked parent directories. (by @jochumdev)
 
-- External networks referencing an unmanaged host network (such as an unmanaged
-  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
-  translated to `nictype: bridged` (or `physical` / `macvlan`) with
-  `parent: <name>` on the instance device instead of `network: <name>`, allowing
-  direct attachment to unmanaged host bridges via standard compose `networks:`
-  declarations. (by @jochumdev)
+- Support for custom image builders and built-in `nix2container` builds via
+  `build.x-incus-compose` (`builder` and `args`), allowing container images to
+  be built directly from `nix2container` flake targets or external builder
+  binaries without Docker or Podman. (by @jochumdev)
 
 - Support for OVN networks as the default network driver for newly created
   projects when Incus supports OVN. Includes `--network-driver` /
@@ -38,6 +36,7 @@ form.
   `x-incus-compose.uplink` (or `parent`) extension to configure uplink networks.
   Existing projects and servers without OVN continue to use bridge networks. (by
   @jochumdev)
+
 - Service-name and alias DNS resolution now works on OVN networks. incus-compose
   peers each project network to the shared `ic-dns` and scopes it with a hidden
   network ACL, so service names and network aliases resolve with no compose
@@ -45,10 +44,12 @@ form.
   prevent contested collisions in `ic-dns`. OVN networks also get a default ACL
   posture matching docker compose: instances on the same network reach each
   other, nothing else may initiate in, outbound is allowed. (by @jochumdev)
+
 - `--no-dns` / `INCUS_COMPOSE_NO_DNS` flag on `up` and `down`, and
   `x-incus-compose.dns.disabled` compose option to opt out of DNS sidecar
   creation/configuration on `up` and stop/removal of project-scoped sidecars on
   `down`. (by @jochumdev)
+
 - `ic-dns`: A new split-horizon authoritative DNS daemon for Incus instances,
   built on the new `ievent` event framework and CoreDNS. Resolves instance names
   dynamically within per-project or shared zones (`.incus`), serving records
@@ -58,17 +59,22 @@ form.
   endpoints on `:9153` (or `--http`). Projects opt in via `--project-marker`
   (defaulting to `user.label.dns.scope=global`), an explicit `--project` list,
   or serve all visible projects with `--project-marker ""`. (by @jochumdev)
+
 - `ievent`: A pluggable event pipeline framework for Incus lifecycle events,
   processing daemon event streams through ordered, composable plugins (`source`,
   `debounce`, `enricher`, `checker`, `dns`, `http`, `log`). (by @jochumdev)
+
 - ic-healthd serves `/metrics`, `/health` and `/ready` on `:9153`; an empty
   `--http-address` / `INCUS_COMPOSE_HEALTHD_HTTP_ADDRESS` disables it. (by
   @jochumdev)
+
 - `--metrics` / `INCUS_COMPOSE_HEALTHD_METRICS` flag to record Prometheus
   metrics in ic-healthd (defaults to true). (by @jochumdev)
+
 - Running ic-healthd by hand can now present an already-trusted certificate
   (`--client-cert` with `--client-key`) or connect as a remote from the Incus
   CLI configuration (`--remote` with `--use-remote`). (by @jochumdev)
+
 - Support for Compose Specification lifecycle hooks (`pre_start` and
   `post_start`) on services. `pre_start` runs ephemeral init containers sharing
   the service's volumes and tmpfs mounts before the main service starts,
@@ -78,15 +84,12 @@ form.
   non-interactively inside the running service container after startup and
   before healthcheck evaluation, supporting `command`, `user`, `privileged`,
   `working_dir`, and `environment`. (by @jochumdev)
+
 - Configurable tools volume, mount path, and sleep helper image options on
   `client.GlobalClient` (`ClientToolsVolume`, `ClientToolsMount`,
   `ClientSleepImage`). (by @jochumdev)
 
 ### Changed
-
-- `ic-healthd`: Filter instances early in the enricher using `enricher.Instance`
-  so only instances with `user.healthcheck.enabled: "true"` are enriched and
-  processed. (by @jochumdev)
 
 - `healthd status` now format output with status, IPv4 and IPv6 addresses, and
   optional Prometheus metrics queried directly via `incus port-forward` and
@@ -100,9 +103,6 @@ form.
 
 - Require incus 7.0.2+ LTS or 7.5+ both unreleased at the time of writing, we
   need various recent bugfixes (by @jochumdev)
-
-- ic-healthd and ic-dns now pin the Incus server certificate by fingerprint
-  instead of skipping TLS verification. (by @jochumdev)
 
 - ic-healthd is migrated to the `ievent` framework: one chain of plugins
   replaces its listener, router and per-project schedulers. The sidecar contract
@@ -124,29 +124,72 @@ form.
   (`shared.HealthIgnoreKey`) tag and check; instance watching is strictly opt-in
   via `user.healthcheck.enabled`. (by @jochumdev)
 
+## [v1.3.5] - 2026-10-17
+
 ### Fixed
 
-- `ievent/enricher`: Virtual machines running without an active Incus agent
-  (e.g., VMs without `incus-agent` installed or running) are now handled
-  cleanly. Enricher avoids polling for IP addresses when the VM is already
-  running without an agent, suppresses misleading timeout warnings, falls back
-  to static IP definitions on NIC devices, and settles immediately without
-  getting trapped in an infinite retry loop. (by @jochumdev)
 - Network `aliases` are now flushed to `raw.dnsmasq` when all services in a
   project set `container_name` equal to their service key. Previously, DNS alias
   flushing was only triggered during instance address registration, which was
   skipped when the container name matched the service name. (by @Tofil,
   @jochumdev, #206)
+
 - `down --rmi` now validates its argument (`local` or `all`), preventing
   subsequent flags (such as `--volumes`) or invalid values from being silently
   consumed. (by @pikeas, @jochumdev, #220)
+
 - `down` now validates service names passed as arguments against declared
   services in the Compose project, returning an error if a service does not
   exist rather than silently doing nothing. (by @pikeas, @jochumdev, #221)
 
+- Containers on Incus < 7.6 now set `lxc.environment.hooks` via `raw.lxc` to
+  override `PATH` for LXC hooks running on the host, fixing containers whose
+  image `PATH` does not match the host's (such as
+  `ghcr.io/nix-containers/images/*`). (by @jochumdev)
+
+### Added
+
+- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
+  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
+  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
+  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
+  over manual connection settings; otherwise, manual connection takes precedence
+  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
+
+- Support for pass-through bind mounts on remote Incus servers via the inline
+  volume extension `x-incus-compose.remote: true` or the global
+  `--allow-remote-mounts` (`INCUS_COMPOSE_ALLOW_REMOTE_MOUNTS`) flag. Both skip
+  the same-host and local `os.Stat` checks so the source path is resolved on the
+  remote Incus host. (by @jochumdev)
+
+- External networks referencing an unmanaged host network (such as an unmanaged
+  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
+  translated to `nictype: bridged` (or `physical` / `macvlan`) with
+  `parent: <name>` on the instance device instead of `network: <name>`, allowing
+  direct attachment to unmanaged host bridges via standard compose `networks:`
+  declarations. (by @jochumdev)
+
+### Changed
+
+- Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
+  volume on every `up`, overwriting matching files in the target while leaving
+  other files in the volume untouched. (by @jochumdev)
+
 ## [v1.3.4] - 2026-09-17
 
+### Added
+
+- Compose network `ipam.config` pools are now supported. Subnet and gateway
+  definitions automatically calculate the corresponding Incus `ipv4.address` and
+  `ipv6.address` gateway CIDRs on custom networks, with explicit `x-incus`
+  network extensions taking precedence when specified. (by @jochumdev)
+
 ### Fixed
+
+- Healthd registration token storage moved from `/run/secrets/token` to
+  `/secrets/token` for Incus 7.0.1 LTS users, where `/run` tmpfs mounts masked
+  the token file and caused certificate registration to fail. This temporary
+  workaround will be removed in v1.4.0. (by @jochumdev, #201)
 
 - `list` now logs the error that ensuring the stack returned, instead of the
   literal text `error=err`. (by @pikeas)

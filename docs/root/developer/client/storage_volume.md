@@ -22,8 +22,8 @@ func (r *StorageVolume) SFTP(ctx context.Context) (*sftp.Client, error)
 Returns a new SFTP connection to the volume (`ErrNotEnsured` if the volume
 hasn't been ensured yet). The caller closes it.
 
-It is also how `StorageVolumeConfig.HostPath` seeds a volume on first creation:
-the directory is walked and written file by file over one connection.
+It is also how `StorageVolumeConfig.HostPath` seeds a volume on `Start()`: the
+directory is walked and written file by file over one connection.
 
 **No `ReadFile`/`WriteFile` wrapper.** The full `github.com/pkg/sftp` client is
 exposed - `OpenFile`, `Stat`, `Rename`, `ReadDir`, `PosixRename` - rather than a

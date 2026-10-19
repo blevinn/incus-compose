@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.27.1-trixie
+ARG GO_VERSION=1.27.2-trixie
 # Root, not :nonroot - ic-dns binds port 53 here, and resolv.conf has no port
 # field, so a client can only ever name the privileged one.
 ARG BASE=docker.io/library/busybox:glibc
@@ -18,10 +18,10 @@ ARG VERSION=dev
 # cheapest thing that proves the binary links and its command tree parses -
 # which is what a chain composed at compile time can silently get wrong.
 RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags "-X main.version=${VERSION}" -o /out/ic-dns ./cmd/ic-dns && \
-    /out/ic-dns version && \
-    /out/ic-dns run --help > /dev/null
+  --mount=type=cache,target=/root/.cache/go-build \
+  go build -ldflags "-X main.version=${VERSION}" -o /out/ic-dns ./cmd/ic-dns && \
+  /out/ic-dns version && \
+  /out/ic-dns run --help > /dev/null
 
 FROM ${BASE}
 COPY --from=build /out/ic-dns /usr/local/sbin/ic-dns
@@ -32,7 +32,7 @@ WORKDIR /
 EXPOSE 53 53/udp 9153
 
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --spider http://127.0.0.1:9153/ready || exit 1
+  CMD wget --quiet --spider http://127.0.0.1:9153/ready || exit 1
 
 # Everything else comes from the environment: DNS_INCUS, DNS_TOKEN,
 # DNS_FORWARD and the rest, which is what a compose file sets. There is no

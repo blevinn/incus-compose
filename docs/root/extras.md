@@ -18,8 +18,9 @@ beyond it is reachable from the same compose file, through three escape hatches:
   upstream `compose.yaml` stays untouched.
 - **`x-incus`** - passes any Incus config key straight through to the instance,
   network or volume it sits on. incus-compose does not interpret these.
-- **`x-incus-compose`** - features incus-compose implements itself: devices,
-  volume placement and seeding, backups, healthd, network, and DNS.
+- **`x-incus-compose`** - features incus-compose implements itself: custom
+  builders, devices, volume placement and seeding, backups, healthd, network,
+  and DNS.
 
 For what the Compose spec itself supports, see
 [Compose Compatibility](/compose-compatibility).
@@ -147,6 +148,31 @@ definition. See
 
 These are implemented by incus-compose itself rather than passed through.
 
+### Build
+
+Set `x-incus-compose` inside a service's `build:` block to build an image using
+the built-in `nix2container` builder or an external custom builder binary:
+
+```yaml
+services:
+  cache:
+    image: ghcr.io/nix-containers/images/valkey:latest
+    build:
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - github:nix-containers/images#valkey
+```
+
+| Key       | Description                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------------- |
+| `builder` | `nix2container` (built-in in-process builder) or an external builder executable name/path.                     |
+| `args`    | Arguments passed to the builder (for `nix2container`, the first argument is the flake target such as `.#api`). |
+
+See
+[Builds - Custom Builders and nix2container](/builds#custom-builders-and-nix2container)
+for the external builder contract and full details.
+
 ### Devices
 
 Attach raw Incus devices to a service's instances with the
@@ -252,13 +278,16 @@ services:
 The source is read by incus-compose, on the machine you run it from, and must
 exist there. What happens next depends on what it is:
 
-- **A directory** becomes a custom storage volume, filled from the directory
-  when the volume is **created**. Later changes on your machine do not
-  propagate: the volume goes its own way from there, and `up` will not re-seed
-  it. Delete the volume to start over.
+- **A directory** becomes a custom storage volume, filled from the directory on
+  **every `up`**, overwriting matching files in the volume while leaving any
+  other files there untouched.
 - **A single file** is pushed into the instance on **every start**, while it is
   still stopped, overwriting what is there. Handy for a config or a key you want
   refreshed each time.
+
+> **Warning:** Changed in v1.3.5. Directory volumes are now re-seeded on every
+> `up`, overwriting matching files in the target. Earlier versions only seeded
+> the volume when it was first created.
 
 Seeding is a copy, in one direction. Nothing written inside the container comes
 back out, so it does not replace a named volume for data you mean to keep.

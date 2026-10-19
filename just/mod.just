@@ -123,8 +123,8 @@ boundary:
 # Lint all files. The path scopes the Go step, the rest are whole-tree.
 lint path="./...":
     shellcheck **/*.sh
-    npx --yes prettier --check .
-    cd docs; npx --yes prettier --check .
+    prettier --check .
+    cd docs; prettier --check .
     golangci-lint run {{ path }}
 
 # Lint and fix all files. Imports are gopls' job, not this one - see AGENTS.md.

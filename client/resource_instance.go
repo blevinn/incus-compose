@@ -727,6 +727,19 @@ func (r *Instance) create(ctx context.Context, opts ...Option) error {
 	// This is after all our configs so we allow users to override it.
 	maps.Copy(config, r.Config.Extensions)
 
+	// Shim https://github.com/lxc/incus/pull/4128
+	if !r.client.globalClient.HasExtension(shared.Incus76Extension) && r.Config.Type == incusApi.InstanceTypeContainer {
+		raw := config["raw.lxc"]
+		if !strings.Contains(raw, "lxc.environment.hooks") {
+			if raw != "" && !strings.HasSuffix(raw, "\n") {
+				raw += "\n"
+			}
+
+			raw += "lxc.environment.hooks = PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+			config["raw.lxc"] = raw
+		}
+	}
+
 	_, hasStatus := config[HealthStatusKey]
 
 	if options.Healthd {
@@ -869,6 +882,7 @@ func (r *Instance) Start(ctx context.Context, opts ...Option) error {
 			retry.Attempts(6),
 			retry.Delay(500*time.Millisecond),
 			retry.DelayType(retry.FixedDelay),
+			retry.LastErrorOnly(true),
 		).Do(func() error {
 			running, err := r.client.HealthdRunning()
 			if err != nil {

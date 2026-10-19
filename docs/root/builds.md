@@ -19,19 +19,22 @@ leafwiki_last_author_id: vOmfrlBDg
 incus-compose supports building local service images from Compose `build:`
 definitions and importing the result into the Incus project.
 
-> Build support requires `podman` or `docker` on the machine running
-> incus-compose.
+> Standard Dockerfile builds require `buildah`, `podman` or `docker` on the
+> machine running incus-compose. `nix2container` builds only require `nix`.
 
-incus-compose does not implement a builder itself and does not use the Buildah
-Go library. It shells out to a local container builder, then imports the built
-rootfs into Incus as an image.
+For Dockerfile builds, incus-compose shells out to a local container builder and
+imports the built rootfs into Incus as an image. Services can also configure a
+custom builder or the built-in `nix2container` builder via
+[`build.x-incus-compose`](#custom-builders-and-nix2container).
 
 Builder selection:
 
-1. `INCUS_COMPOSE_BUILDER`, when set
-2. `buildah`, when found in `PATH`
-3. `podman`, when found in `PATH`
-4. `docker`, when found in `PATH`
+1. `build.x-incus-compose.builder`, when set (`nix2container` or an external
+   builder binary)
+2. `INCUS_COMPOSE_BUILDER`, when set
+3. `buildah`, when found in `PATH`
+4. `podman`, when found in `PATH`
+5. `docker`, when found in `PATH`
 
 Examples:
 
@@ -104,17 +107,79 @@ localhost/<project>-<service>
 
 ## Supported build options
 
-| Option              | Support                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `context`           | Build context directory. Relative paths are resolved by compose-go.                                                            |
-| `dockerfile`        | Alternate Dockerfile or Containerfile path, resolved relative to `context` (absolute paths are used as given).                 |
-| `dockerfile_inline` | Inline Dockerfile content. incus-compose writes it to a temporary file before invoking the builder.                            |
-| `args`              | Build arguments, passed as `--build-arg KEY=VALUE`. Args without values are ignored.                                           |
-| `no_cache`          | Passed as `--no-cache` to the builder; also skips the shared image cache for this build (see [Image Caching](#image-caching)). |
-| `pull`              | Passed as `--pull`.                                                                                                            |
-| `target`            | Multi-stage build target, passed as `--target`.                                                                                |
-| `platforms`         | A single platform is supported. Multiple platforms are rejected.                                                               |
-| service `platform`  | Used as the build platform when `build.platforms` is not set.                                                                  |
+| Option              | Support                                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `context`           | Build context directory. Relative paths are resolved by compose-go. Defaults to `.` when `x-incus-compose.builder` is set.          |
+| `dockerfile`        | Alternate Dockerfile or Containerfile path, resolved relative to `context` (absolute paths are used as given).                      |
+| `dockerfile_inline` | Inline Dockerfile content. incus-compose writes it to a temporary file before invoking the builder.                                 |
+| `args`              | Build arguments, passed as `--build-arg KEY=VALUE` (or environment variables for custom builders). Args without values are ignored. |
+| `no_cache`          | Passed as `--no-cache` to the builder; also skips the shared image cache for this build (see [Image Caching](#image-caching)).      |
+| `pull`              | Passed as `--pull`.                                                                                                                 |
+| `target`            | Multi-stage build target, passed as `--target`.                                                                                     |
+| `platforms`         | A single platform is supported. Multiple platforms are rejected.                                                                    |
+| service `platform`  | Used as the build platform when `build.platforms` is not set.                                                                       |
+| `x-incus-compose`   | Custom builder configuration (`builder` and `args`); see [Custom Builders and nix2container](#custom-builders-and-nix2container).   |
+
+## Custom Builders and nix2container
+
+Set `x-incus-compose` inside a service's `build:` block to build an image with
+`nix2container` or an external builder binary instead of a Dockerfile builder.
+When `builder` is set and `context` is omitted, `context` defaults to `.`.
+
+### Built-in `nix2container` builder
+
+When `builder: nix2container` is set, incus-compose evaluates the flake target
+passed in `args[0]` with `nix build --json` and assembles the OCI rootfs and
+image configuration in-process - no `docker`, `podman`, `buildah` or `skopeo` is
+needed:
+
+```yaml
+services:
+  cache:
+    image: ghcr.io/nix-containers/images/valkey:latest
+    build:
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - github:nix-containers/images#valkey
+
+  api:
+    image: nix2container-api:latest
+    build:
+      context: ./api
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - .#api
+```
+
+Target architectures (`x86_64` -> `x86_64-linux`, `aarch64` -> `aarch64-linux`)
+are mapped automatically when rewriting flake outputs for the target Incus
+server architecture.
+
+### External custom builders
+
+Any other `builder` value is resolved as an executable name or path and invoked
+with `args` in the build `context` directory. incus-compose passes the following
+environment variables to the builder process:
+
+- `TARGETPLATFORM` (e.g. `linux/amd64`)
+- `TARGETOS` (`linux`)
+- `TARGETARCH` (e.g. `amd64` or `x86_64`)
+- `IMAGE_NAME` (resolved Incus image alias)
+- `INCUS_PROJECT` (target Incus project name)
+- Every `KEY=VALUE` entry from `build.args`
+
+The builder must write a JSON object to stdout naming the generated rootfs
+tarball and OCI image config JSON file (temporary files are cleaned up by
+incus-compose after import):
+
+```json
+{
+  "rootfs": "/tmp/my-builder-xxx/rootfs.tar",
+  "config": "/tmp/my-builder-xxx/config.json"
+}
+```
 
 ## Image Caching
 

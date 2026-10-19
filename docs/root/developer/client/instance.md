@@ -229,7 +229,7 @@ with `not on the same host` when it is not, because incusd resolves the source
 path on its own filesystem, so a path from elsewhere would not be there.
 
 A volume carrying `x-incus-compose.seed` skips the check entirely: a directory
-becomes a `StorageVolume` with `HostPath` set, seeded at creation, and a single
+becomes a `StorageVolume` with `HostPath` set, seeded on `Start()`, and a single
 file becomes an `InstanceFile` pushed from `start()`. Both read the source
 locally and write it to the server, so neither needs the hosts to match.
 
