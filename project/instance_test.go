@@ -1302,6 +1302,30 @@ func TestInstanceImage(t *testing.T) {
 		require.Error(t, err)
 		assert.NotNil(t, res)
 	})
+
+	t.Run("custom builder x-incus-compose", func(t *testing.T) {
+		t.Parallel()
+		res, err := instanceImage(c, types.ServiceConfig{
+			Name:  "nixservice",
+			Image: "ghcr.io/nix-containers/images/valkey:latest",
+			Build: &types.BuildConfig{
+				Extensions: types.Extensions{
+					"x-incus-compose": map[string]any{
+						"builder": "nix2container",
+						"args":    []string{"github:nix-containers/images#valkey"},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		img, ok := res.(*client.Image)
+		require.True(t, ok)
+		require.NotNil(t, img.Config.Build)
+		assert.Equal(t, "nix2container", img.Config.Build.CustomBuilder)
+		assert.Equal(t, []string{"github:nix-containers/images#valkey"}, img.Config.Build.CustomBuilderArgs)
+		assert.Equal(t, ".", img.Config.Build.Context)
+		assert.Equal(t, "ghcr.io/nix-containers/images/valkey:latest", img.Name())
+	})
 }
 
 func TestInstanceNetworkDevices(t *testing.T) {

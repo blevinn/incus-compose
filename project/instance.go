@@ -643,6 +643,22 @@ func instanceImage(c *client.Client, service types.ServiceConfig) (client.Resour
 				}
 			}
 		}
+		if service.Build.Extensions != nil {
+			var ext struct {
+				Builder string   `mapstructure:"builder"`
+				Args    []string `mapstructure:"args"`
+			}
+			ok, extErr := service.Build.Extensions.Get("x-incus-compose", &ext)
+			if extErr != nil {
+				errs = errors.Join(errs, fmt.Errorf("parsing build.x-incus-compose: %w", extErr))
+			} else if ok {
+				buildCfg.CustomBuilder = ext.Builder
+				buildCfg.CustomBuilderArgs = ext.Args
+			}
+		}
+		if buildCfg.CustomBuilder != "" && buildCfg.Context == "" {
+			buildCfg.Context = "."
+		}
 		cfg.Build = buildCfg
 	}
 

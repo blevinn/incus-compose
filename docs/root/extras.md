@@ -18,8 +18,9 @@ beyond it is reachable from the same compose file, through three escape hatches:
   upstream `compose.yaml` stays untouched.
 - **`x-incus`** - passes any Incus config key straight through to the instance,
   network or volume it sits on. incus-compose does not interpret these.
-- **`x-incus-compose`** - features incus-compose implements itself: devices,
-  volume placement and seeding, backups, healthd, network, and DNS.
+- **`x-incus-compose`** - features incus-compose implements itself: custom
+  builders, devices, volume placement and seeding, backups, healthd, network,
+  and DNS.
 
 For what the Compose spec itself supports, see
 [Compose Compatibility](/compose-compatibility).
@@ -146,6 +147,31 @@ definition. See
 ## x-incus-compose
 
 These are implemented by incus-compose itself rather than passed through.
+
+### Build
+
+Set `x-incus-compose` inside a service's `build:` block to build an image using
+the built-in `nix2container` builder or an external custom builder binary:
+
+```yaml
+services:
+  cache:
+    image: ghcr.io/nix-containers/images/valkey:latest
+    build:
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - github:nix-containers/images#valkey
+```
+
+| Key       | Description                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------------- |
+| `builder` | `nix2container` (built-in in-process builder) or an external builder executable name/path.                     |
+| `args`    | Arguments passed to the builder (for `nix2container`, the first argument is the flake target such as `.#api`). |
+
+See
+[Builds - Custom Builders and nix2container](/builds#custom-builders-and-nix2container)
+for the external builder contract and full details.
 
 ### Devices
 

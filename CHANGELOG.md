@@ -15,6 +15,11 @@ form.
 
 ### Added
 
+- Support for custom image builders and built-in `nix2container` builds via
+  `build.x-incus-compose` (`builder` and `args`), allowing container images to
+  be built directly from `nix2container` flake targets or external builder
+  binaries without Docker or Podman. (by @jochumdev)
+
 - External networks referencing an unmanaged host network (such as an unmanaged
   bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
   translated to `nictype: bridged` (or `physical` / `macvlan`) with

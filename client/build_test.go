@@ -2,11 +2,15 @@ package client
 
 import (
 	"archive/tar"
+	"bytes"
+	"encoding/json"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lxc/incus/v7/shared/osarch"
 
@@ -219,6 +223,8 @@ func TestBuildArgs_Podman(t *testing.T) {
 	require.Contains(t, args, "--build-arg")
 	require.Contains(t, args, "FOO=bar")
 	require.Contains(t, args, "--no-cache")
+	require.Contains(t, args, "--format")
+	require.Contains(t, args, "docker")
 	require.Contains(t, args, "type=tar,dest=/tmp/out.tar")
 	require.NotContains(t, args, "buildx")
 }
@@ -340,4 +346,225 @@ func TestTempFile_Close(t *testing.T) {
 	err = tf.Close()
 	require.NoError(t, err)
 	require.NoFileExists(t, path)
+}
+
+func TestParseImageConfig_Healthcheck(t *testing.T) {
+	t.Parallel()
+
+	rootfsPath := writeRootfsTar(t, map[string]string{
+		"etc/passwd": "root:x:0:0:root:/root:/bin/sh\napp:x:1000:1000::/home/app:/bin/sh\n",
+	})
+
+	cfgMap := map[string]any{
+		"User":       "1000:1000",
+		"WorkingDir": "/app",
+		"Env":        []any{"FOO=bar"},
+		"Entrypoint": []any{"/app/entrypoint"},
+		"Cmd":        []any{"serve", "--port", "8080"},
+		"Volumes":    map[string]any{"/data": map[string]any{}},
+		"Healthcheck": map[string]any{
+			"Test":        []any{"CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"},
+			"Interval":    float64(10 * time.Second),
+			"Timeout":     float64(3 * time.Second),
+			"StartPeriod": float64(5 * time.Second),
+			"Retries":     float64(3),
+		},
+	}
+
+	ociCfg, configJSON, err := parseImageConfig(cfgMap, rootfsPath)
+	require.NoError(t, err)
+
+	require.Equal(t, "1000:1000", ociCfg.User)
+	require.Equal(t, "/app", ociCfg.WorkingDir)
+	require.Equal(t, []string{"/app/entrypoint"}, ociCfg.Entrypoint)
+	require.Equal(t, []string{"serve", "--port", "8080"}, ociCfg.Cmd)
+	require.Contains(t, ociCfg.Volumes, "/data")
+
+	require.NotNil(t, ociCfg.Healthcheck)
+	require.Equal(t, []string{"CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"}, ociCfg.Healthcheck.Test)
+	require.Equal(t, 10*time.Second, ociCfg.Healthcheck.Interval)
+	require.Equal(t, 3*time.Second, ociCfg.Healthcheck.Timeout)
+	require.Equal(t, 5*time.Second, ociCfg.Healthcheck.StartPeriod)
+	require.Equal(t, 3, ociCfg.Healthcheck.Retries)
+
+	require.NotEmpty(t, configJSON)
+	var spec map[string]any
+	require.NoError(t, json.Unmarshal(configJSON, &spec))
+	process, ok := spec["process"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"/app/entrypoint", "serve", "--port", "8080"}, process["args"])
+	require.Equal(t, "/app", process["cwd"])
+}
+
+func TestParseImageConfig_Healthcheck_LowerCase(t *testing.T) {
+	t.Parallel()
+
+	rootfsPath := writeRootfsTar(t, map[string]string{
+		"etc/passwd": "root:x:0:0:root:/root:/bin/sh\n",
+	})
+
+	cfgMap := map[string]any{
+		"healthcheck": map[string]any{
+			"test":         []any{"CMD", "true"},
+			"interval":     float64(5 * time.Second),
+			"timeout":      float64(2 * time.Second),
+			"start_period": float64(1 * time.Second),
+			"retries":      float64(2),
+		},
+	}
+
+	ociCfg, _, err := parseImageConfig(cfgMap, rootfsPath)
+	require.NoError(t, err)
+
+	require.NotNil(t, ociCfg.Healthcheck)
+	require.Equal(t, []string{"CMD", "true"}, ociCfg.Healthcheck.Test)
+	require.Equal(t, 5*time.Second, ociCfg.Healthcheck.Interval)
+	require.Equal(t, 2*time.Second, ociCfg.Healthcheck.Timeout)
+	require.Equal(t, 1*time.Second, ociCfg.Healthcheck.StartPeriod)
+	require.Equal(t, 2, ociCfg.Healthcheck.Retries)
+}
+
+func TestParseImageConfig_Healthcheck_StringDurations(t *testing.T) {
+	t.Parallel()
+
+	rootfsPath := writeRootfsTar(t, map[string]string{
+		"etc/passwd": "root:x:0:0:root:/root:/bin/sh\n",
+	})
+
+	cfgMap := map[string]any{
+		"Healthcheck": map[string]any{
+			"Test":          []any{"CMD-SHELL", "/bin/check"},
+			"Interval":      "15s",
+			"Timeout":       "4s",
+			"StartPeriod":   "30s",
+			"StartInterval": "1s",
+			"Retries":       "5",
+		},
+	}
+
+	ociCfg, _, err := parseImageConfig(cfgMap, rootfsPath)
+	require.NoError(t, err)
+
+	require.NotNil(t, ociCfg.Healthcheck)
+	require.Equal(t, []string{"CMD-SHELL", "/bin/check"}, ociCfg.Healthcheck.Test)
+	require.Equal(t, 15*time.Second, ociCfg.Healthcheck.Interval)
+	require.Equal(t, 4*time.Second, ociCfg.Healthcheck.Timeout)
+	require.Equal(t, 30*time.Second, ociCfg.Healthcheck.StartPeriod)
+	require.Equal(t, 1*time.Second, ociCfg.Healthcheck.StartInterval)
+	require.Equal(t, 5, ociCfg.Healthcheck.Retries)
+}
+
+func TestDetectBuilder_CustomBuilder(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	builderScript := filepath.Join(tmpDir, "mock-builder.sh")
+
+	scriptContent := `#!/usr/bin/env bash
+set -euo pipefail
+
+out_dir=$(mktemp -d /tmp/mock-builder-XXXXXX)
+config_file="${out_dir}/config.json"
+rootfs_file="${out_dir}/rootfs.tar"
+
+cat <<'EOF' > "${config_file}"
+{
+  "User": "0:0",
+  "WorkingDir": "/",
+  "Cmd": ["echo", "hello"],
+  "Env": ["TARGETARCH=${TARGETARCH:-}", "CUSTOM_ARG=${CUSTOM_ARG:-}"],
+  "Healthcheck": {
+    "Test": ["CMD", "true"],
+    "Interval": 5000000000
+  }
+}
+EOF
+
+tar -cf "${rootfs_file}" -C "${out_dir}" config.json
+
+cat <<EOF
+{
+  "rootfs": "${rootfs_file}",
+  "config": "${config_file}"
+}
+EOF
+`
+	err := os.WriteFile(builderScript, []byte(scriptContent), 0o755)
+	require.NoError(t, err)
+
+	client := &Client{incusProject: "test-proj", logger: slog.Default()}
+	cfg := &BuildConfig{
+		CustomBuilder:     builderScript,
+		CustomBuilderArgs: []string{"arg1"},
+		Args:              map[string]string{"CUSTOM_ARG": "custom_val"},
+	}
+
+	builder, err := detectBuilder(cfg, "")
+	require.NoError(t, err)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	artifacts, err := builder(t.Context(), client, cfg, "test-img", "x86_64", &stdout, &stderr)
+	require.NoError(t, err)
+	require.NotNil(t, artifacts)
+	require.NotNil(t, artifacts.Rootfs)
+	require.NotNil(t, artifacts.Config)
+	require.NotEmpty(t, artifacts.ConfigJSON)
+
+	require.NotNil(t, artifacts.Config.Healthcheck)
+	require.Equal(t, []string{"CMD", "true"}, artifacts.Config.Healthcheck.Test)
+	require.Equal(t, 5*time.Second, artifacts.Config.Healthcheck.Interval)
+
+	tf, ok := artifacts.Rootfs.(*tempFile)
+	require.True(t, ok)
+	rootfsPath := tf.path
+	dirToClean := tf.dir
+
+	require.FileExists(t, rootfsPath)
+	err = artifacts.Rootfs.Close()
+	require.NoError(t, err)
+
+	require.NoFileExists(t, rootfsPath)
+	if dirToClean != "" {
+		require.NoDirExists(t, dirToClean)
+	}
+}
+
+func TestDetectBuilder_CustomBuilderNotFound(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BuildConfig{
+		CustomBuilder: "nonexistent-builder-binary-12345",
+	}
+
+	_, err := detectBuilder(cfg, "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestDetectBuilder_Preferred(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BuildConfig{}
+	builder, err := detectBuilder(cfg, "echo")
+	require.NoError(t, err)
+	require.NotNil(t, builder)
+}
+
+func TestDetectBuilder_PreferredNotFound(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BuildConfig{}
+	_, err := detectBuilder(cfg, "this-binary-does-not-exist-incus-compose-test")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestSelectContainerBuilder_Nix2Container(t *testing.T) {
+	t.Parallel()
+
+	cfg := &BuildConfig{CustomBuilder: "nix2container"}
+	builder, err := detectBuilder(cfg, "")
+	require.NoError(t, err)
+	require.NotNil(t, builder)
 }

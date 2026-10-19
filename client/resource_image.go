@@ -882,6 +882,11 @@ func (r *Image) copyToProject(ctx context.Context, args Options, cacheAlias *inc
 		return ErrCreate.WithText("project image").Wrap(err)
 	}
 
+	err = r.ociStoreConfig(ctx, conn, r.client.incusProject, cacheAlias.Target, nil)
+	if err != nil {
+		return ErrCreate.WithText("storing OCI config in project image").Wrap(err)
+	}
+
 	return r.get(ctx)
 }
 
@@ -1087,18 +1092,18 @@ func (r *Image) buildImage(ctx context.Context, c *Client, args Options) error {
 		buildCfg.Platform = "linux/" + archPlatform(r.arch)
 	}
 
-	builder, err := buildDetectBuilder(args.Build.PreferredBuilder)
+	builder, err := detectBuilder(&buildCfg, args.Build.PreferredBuilder)
 	if err != nil {
 		return ErrCreate.WithText("no container builder").Wrap(err)
 	}
 
-	rootfs, configJSON, ociCfg, err := buildRootfs(ctx, r.client, builder, &buildCfg, c.Global().Stdout(), c.Global().Stderr())
+	artifacts, err := builder(ctx, r.client, &buildCfg, r.incusName, r.arch, c.Global().Stdout(), c.Global().Stderr())
 	if err != nil {
 		return ErrCreate.WithText("building container image").Wrap(err)
 	}
-	defer r.client.WarnError(rootfs.Close, "Failure during close")
+	defer r.client.WarnError(artifacts.Rootfs.Close, "Failure during close")
 
-	meta, err := buildMetadataTar(r.incusName, r.arch, configJSON)
+	meta, err := buildMetadataTar(r.incusName, r.arch, artifacts.ConfigJSON)
 	if err != nil {
 		return ErrCreate.WithText("building image metadata").Wrap(err)
 	}
@@ -1111,7 +1116,7 @@ func (r *Image) buildImage(ctx context.Context, c *Client, args Options) error {
 		target = imageTarget{conn: r.cache.incus, project: r.cache.incusProject, alias: r.cacheAlias(), logName: "cache"}
 	}
 
-	built, err := r.importBuilt(ctx, args, target, meta, rootfs, ociCfg)
+	built, err := r.importBuilt(ctx, args, target, meta, artifacts.Rootfs, artifacts.Config)
 	if err != nil {
 		return err
 	}

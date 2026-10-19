@@ -1,0 +1,53 @@
+services:
+  proxy:
+    image: ghcr.io/nix-containers/images/caddy:latest
+    build:
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - github:nix-containers/images#caddy
+    ports:
+      - 8080:8080
+    volumes:
+      - caddy_config:/etc/caddy
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    depends_on:
+      - api
+
+  api:
+    image: nix2container-api:latest
+    build:
+      context: ./api
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - .#api
+    ports:
+      - 8000:8000
+    environment:
+      - CACHE_HOST=cache
+      - CACHE_PORT=6379
+    depends_on:
+      - cache
+
+  cache:
+    image: ghcr.io/nix-containers/images/valkey:latest
+    build:
+      x-incus-compose:
+        builder: nix2container
+        args:
+          - github:nix-containers/images#valkey
+    ports:
+      - 6379:6379
+    volumes:
+      - cache_data:/data
+
+configs:
+  caddyfile:
+    file: ./caddy/Caddyfile
+
+volumes:
+  caddy_config:
+  cache_data:
