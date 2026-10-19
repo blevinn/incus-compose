@@ -15,17 +15,16 @@ form.
 
 ### Added
 
+- Disk and tmpfs mount targets that are symlinks in the container rootfs (common
+  in `nix-containers` images such as `/etc/caddy` pointing into `/nix/store`)
+  are now materialized as real directories or files before starting the
+  instance, and recursive directory creation when pushing files now follows
+  existing symlinked parent directories. (by @jochumdev)
+
 - Support for custom image builders and built-in `nix2container` builds via
   `build.x-incus-compose` (`builder` and `args`), allowing container images to
   be built directly from `nix2container` flake targets or external builder
   binaries without Docker or Podman. (by @jochumdev)
-
-- External networks referencing an unmanaged host network (such as an unmanaged
-  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
-  translated to `nictype: bridged` (or `physical` / `macvlan`) with
-  `parent: <name>` on the instance device instead of `network: <name>`, allowing
-  direct attachment to unmanaged host bridges via standard compose `networks:`
-  declarations. (by @jochumdev)
 
 - Support for OVN networks as the default network driver for newly created
   projects when Incus supports OVN. Includes `--network-driver` /
@@ -90,18 +89,7 @@ form.
   `client.GlobalClient` (`ClientToolsVolume`, `ClientToolsMount`,
   `ClientSleepImage`). (by @jochumdev)
 
-- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
-  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
-  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
-  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
-  over manual connection settings; otherwise, manual connection takes precedence
-  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
-
 ### Changed
-
-- `ic-healthd`: Filter instances early in the enricher using `enricher.Instance`
-  so only instances with `user.healthcheck.enabled: "true"` are enriched and
-  processed. (by @jochumdev)
 
 - `healthd status` now format output with status, IPv4 and IPv6 addresses, and
   optional Prometheus metrics queried directly via `incus port-forward` and
@@ -115,9 +103,6 @@ form.
 
 - Require incus 7.0.2+ LTS or 7.5+ both unreleased at the time of writing, we
   need various recent bugfixes (by @jochumdev)
-
-- ic-healthd and ic-dns now pin the Incus server certificate by fingerprint
-  instead of skipping TLS verification. (by @jochumdev)
 
 - ic-healthd is migrated to the `ievent` framework: one chain of plugins
   replaces its listener, router and per-project schedulers. The sidecar contract
@@ -133,24 +118,16 @@ form.
   subcommands (`up`, `run`, `pull`, `healthd up`/`down`, `dns up`). Images are
   resolved centrally on initialization. (by @jochumdev)
 
-- Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
-  volume on every `up`, overwriting matching files in the target while leaving
-  other files in the volume untouched. (by @jochumdev)
-
 ### Removed
 
 - `ic-healthd`: Remove deprecated `user.healthcheck.ignore`
   (`shared.HealthIgnoreKey`) tag and check; instance watching is strictly opt-in
   via `user.healthcheck.enabled`. (by @jochumdev)
 
+## [v1.3.5] - 2026-10-17
+
 ### Fixed
 
-- `ievent/enricher`: Virtual machines running without an active Incus agent
-  (e.g., VMs without `incus-agent` installed or running) are now handled
-  cleanly. Enricher avoids polling for IP addresses when the VM is already
-  running without an agent, suppresses misleading timeout warnings, falls back
-  to static IP definitions on NIC devices, and settles immediately without
-  getting trapped in an infinite retry loop. (by @jochumdev)
 - Network `aliases` are now flushed to `raw.dnsmasq` when all services in a
   project set `container_name` equal to their service key. Previously, DNS alias
   flushing was only triggered during instance address registration, which was
@@ -170,9 +147,49 @@ form.
   image `PATH` does not match the host's (such as
   `ghcr.io/nix-containers/images/*`). (by @jochumdev)
 
+### Added
+
+- Support for direct Incus connections via `--server-url` (`INCUS_SERVER_URL`),
+  `--client-cert-file` (`INCUS_CLIENT_CERT_FILE`), `--client-key-file`
+  (`INCUS_CLIENT_KEY_FILE`), and `--server-fingerprint`
+  (`INCUS_SERVER_FINGERPRINT`). An explicit `--remote` flag takes precedence
+  over manual connection settings; otherwise, manual connection takes precedence
+  over `INCUS_REMOTE` or the default Incus remote. (by @jochumdev)
+
+- Support for pass-through bind mounts on remote Incus servers via the inline
+  volume extension `x-incus-compose.remote: true` or the global
+  `--allow-remote-mounts` (`INCUS_COMPOSE_ALLOW_REMOTE_MOUNTS`) flag. Both skip
+  the same-host and local `os.Stat` checks so the source path is resolved on the
+  remote Incus host. (by @jochumdev)
+
+- External networks referencing an unmanaged host network (such as an unmanaged
+  bridge `br0` where Incus reports `MANAGED: NO`) are now automatically
+  translated to `nictype: bridged` (or `physical` / `macvlan`) with
+  `parent: <name>` on the instance device instead of `network: <name>`, allowing
+  direct attachment to unmanaged host bridges via standard compose `networks:`
+  declarations. (by @jochumdev)
+
+### Changed
+
+- Seeded directory bind mounts (`x-incus-compose.seed: true`) now re-seed the
+  volume on every `up`, overwriting matching files in the target while leaving
+  other files in the volume untouched. (by @jochumdev)
+
 ## [v1.3.4] - 2026-09-17
 
+### Added
+
+- Compose network `ipam.config` pools are now supported. Subnet and gateway
+  definitions automatically calculate the corresponding Incus `ipv4.address` and
+  `ipv6.address` gateway CIDRs on custom networks, with explicit `x-incus`
+  network extensions taking precedence when specified. (by @jochumdev)
+
 ### Fixed
+
+- Healthd registration token storage moved from `/run/secrets/token` to
+  `/secrets/token` for Incus 7.0.1 LTS users, where `/run` tmpfs mounts masked
+  the token file and caused certificate registration to fail. This temporary
+  workaround will be removed in v1.4.0. (by @jochumdev, #201)
 
 - `list` now logs the error that ensuring the stack returned, instead of the
   literal text `error=err`. (by @pikeas)
