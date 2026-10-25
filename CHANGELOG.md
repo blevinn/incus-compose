@@ -141,6 +141,9 @@ form.
 - Taking the global lock gives up after five failed attempts with the underlying
   error instead of retrying silently for ever. (by @tallica)
 
+- The client's project cache and hooks are safe to use from parallel workers; a
+  race could drop a cached project or a debug hook. (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed
