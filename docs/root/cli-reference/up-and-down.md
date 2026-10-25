@@ -61,7 +61,23 @@ service is left alone; `--recreate` is how you recreate the whole project. See
 `--pull always` recreates on the same rule: an instance whose image the refresh
 replaced is torn down and made again from the new one. Only what the pull itself
 replaced counts - under every other policy a running instance keeps the image it
-was created from, even when the compose file now names a different one.
+was created from while its tag moves. Naming a different image changes the
+service config, which recreates it as below.
+
+`up` recreates the instances whose service config differs from what they were
+created from. Every instance carries the hash of its service in the
+`user.label.incus-compose.config-hash` label, and `config --hash` prints the
+hash of the current file. The hash covers the service as written, `x-incus` and
+`x-incus-compose` blocks included, but not `build`, `pull_policy`, `scale`,
+`depends_on`, `profiles` or `deploy.replicas`, and not a new image behind an
+unchanged tag (that is `--pull always`). Nothing outside the service counts
+either: the top-level `x-incus-compose` block, the network, volume, secret and
+config definitions, and the contents of secret and config files. The service is
+hashed after interpolation and path resolution, so moving the project directory
+or changing a variable the file interpolates marks its instances changed.
+`config --hash '*'` (quoted, or the shell expands it) prints every service.
+Instances created before this version have no label and are never treated as
+changed. `ps` marks drifted instances `(config changed)`.
 
 _Since: v1.3.0_
 

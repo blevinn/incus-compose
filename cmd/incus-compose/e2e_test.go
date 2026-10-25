@@ -1007,6 +1007,15 @@ func TestE2EUpPullAlwaysRecreates(t *testing.T) {
 	created := inst.Config["volatile.base_image"]
 	require.NotEmpty(t, created)
 
+	// The new tag changes the service hash, which recreates on its own; an
+	// unlabelled instance leaves the image as the only reason.
+	err = conn.PatchInstanceConfig(ctx, c.IncusProject(), "web-1", map[string]string{client.ConfigHashKey: ""})
+	require.NoError(t, err)
+
+	inst, _, err = conn.GetInstance(ctx, c.IncusProject(), "web-1", nil)
+	require.NoError(t, err)
+	require.NotContains(t, inst.Config, client.ConfigHashKey)
+
 	runE2ETests(ctx, t, pn, []e2eTest{
 		{
 			name: "up on the new image without a pull policy",
@@ -1042,4 +1051,85 @@ func TestE2EUpPullAlwaysRecreates(t *testing.T) {
 	inst, _, err = conn.GetInstance(ctx, c.IncusProject(), "web-1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, pulled, inst.Config["volatile.base_image"], "an unchanged image must not recreate")
+}
+
+// TestE2EUpRecreateChanged pins that ps flags a drifted instance and up
+// recreates only that one.
+func TestE2EUpRecreateChanged(t *testing.T) {
+	t.Parallel()
+	testlib.SkipE2E(t)
+
+	ctx := t.Context()
+	pn := t.Name()
+
+	service := func(name, env string) string {
+		return `  ` + name + `:
+    image: docker.io/library/busybox:1.36-glibc
+    environment:
+      FOO: ` + env + `
+    x-incus:
+      oci.entrypoint: sh
+`
+	}
+
+	dir := testlib.WriteTempFiles(t, map[string]string{
+		"compose.yaml":     "services:\n" + service("web", "one") + service("db", "one"),
+		"compose-new.yaml": "services:\n" + service("web", "two") + service("db", "one"),
+	})
+	oldCompose := filepath.Join(dir, "compose.yaml")
+	newCompose := filepath.Join(dir, "compose-new.yaml")
+
+	testlib.CleanupCompose(t, pn, "-f", oldCompose, "down", "--project")
+
+	runE2ETests(ctx, t, pn, []e2eTest{
+		{
+			name: "up",
+			args: []string{"-f", oldCompose, "up", "--detach"},
+		},
+	})
+
+	c := projectClient(ctx, t, pn)
+	conn, err := c.Connection()
+	require.NoError(t, err)
+
+	get := func(name string) *incusApi.InstanceFull {
+		inst, _, err := conn.GetInstance(ctx, c.IncusProject(), name, nil)
+		require.NoError(t, err)
+		return inst
+	}
+
+	hashes, err := testlib.RunCompose(ctx, t, pn, "", nil, "-f", oldCompose, "config", "--hash", "*")
+	require.NoError(t, err)
+
+	webHash := get("web-1").Config[client.ConfigHashKey]
+	dbHash := get("db-1").Config[client.ConfigHashKey]
+	require.NotEmpty(t, webHash, "create must write the hash label")
+	require.NotEmpty(t, dbHash, "create must write the hash label")
+	assert.Contains(t, hashes, "web "+webHash+"\n")
+	assert.Contains(t, hashes, "db "+dbHash+"\n")
+
+	webUUID := get("web-1").Config["volatile.uuid"]
+	dbUUID := get("db-1").Config["volatile.uuid"]
+
+	out, err := testlib.RunCompose(ctx, t, pn, "", nil, "-f", newCompose, "ps", "--format", "json")
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(out, `"config_changed": true`), "only the edited service changed")
+
+	runE2ETests(ctx, t, pn, []e2eTest{
+		{
+			name: "up on the edited file",
+			args: []string{"-f", newCompose, "up", "--detach"},
+		},
+	})
+
+	web := get("web-1")
+	assert.NotEqual(t, webUUID, web.Config["volatile.uuid"], "the edited service must be recreated")
+	assert.Equal(t, "two", web.Config["environment.FOO"])
+	assert.Equal(t, dbUUID, get("db-1").Config["volatile.uuid"], "the untouched service must stay")
+
+	hashes, err = testlib.RunCompose(ctx, t, pn, "", nil, "-f", newCompose, "config", "--hash", "web")
+	require.NoError(t, err)
+	require.NotEmpty(t, web.Config[client.ConfigHashKey])
+	assert.NotEqual(t, webHash, web.Config[client.ConfigHashKey], "the recreated instance carries the new hash")
+	assert.Equal(t, "web "+web.Config[client.ConfigHashKey]+"\n", hashes)
 }

@@ -420,49 +420,48 @@ func newUpCommand() *cli.Command {
 
 			// A pulled image only reaches an instance created from it again, so
 			// the ones the ensure above found on the previous fingerprint are
-			// torn down and made from the new one.
-			if pullMode == client.PullAlways {
-				stale := staleInstances(myResources)
-				if len(stale) > 0 {
-					c.LogDebug("Recreating instances on a replaced image", "instances", stale)
+			// torn down and made from the new one, as are the ones created from
+			// an older service config.
+			stale := staleInstances(myResources, pullMode == client.PullAlways)
+			if len(stale) > 0 {
+				c.LogDebug("Recreating outdated instances", "instances", stale)
 
-					downStack := client.NewStack(c, client.StackSortDescending(), client.StackWorkers(cmd.Root().Int("workers")))
-					downStack.Add(stale...)
+				downStack := client.NewStack(c, client.StackSortDescending(), client.StackWorkers(cmd.Root().Int("workers")))
+				downStack.Add(stale...)
 
-					err = downStack.ForAction(client.ActionStop).Run(ctx, client.ActionStop, client.OptionTimeout(cmd.Duration("timeout")))
-					if err != nil {
-						c.LogError("Stopping instances on a replaced image", "error", err)
-						return errLogged.Wrap(err)
-					}
+				err = downStack.ForAction(client.ActionStop).Run(ctx, client.ActionStop, client.OptionTimeout(cmd.Duration("timeout")))
+				if err != nil {
+					c.LogError("Stopping outdated instances", "error", err)
+					return errLogged.Wrap(err)
+				}
 
-					err = downStack.ForAction(client.ActionDelete).Run(ctx, client.ActionDelete, client.OptionTimeout(cmd.Duration("timeout")))
-					if err != nil {
-						c.LogError("Deleting instances on a replaced image", "error", err)
-						return errLogged.Wrap(err)
-					}
+				err = downStack.ForAction(client.ActionDelete).Run(ctx, client.ActionDelete, client.OptionTimeout(cmd.Duration("timeout")))
+				if err != nil {
+					c.LogError("Deleting outdated instances", "error", err)
+					return errLogged.Wrap(err)
+				}
 
-					// Delete drops them from the client, so Start below runs on
-					// the resources this rebuild registers rather than the dead ones.
-					resources, err = p.Resources(c, project.ResourcesScale(scale))
-					if err != nil {
-						c.LogError("Getting project resources after the teardown", "error", err)
-						return errLogged.Wrap(err)
-					}
+				// Delete drops them from the client, so Start below runs on
+				// the resources this rebuild registers rather than the dead ones.
+				resources, err = p.Resources(c, project.ResourcesScale(scale))
+				if err != nil {
+					c.LogError("Getting project resources after the teardown", "error", err)
+					return errLogged.Wrap(err)
+				}
 
-					myResources = filterResources(p, resources, args)
+				myResources = filterResources(p, resources, args)
 
-					stack = client.NewStack(c, client.StackWorkers(cmd.Root().Int("workers")), client.StackFailFast())
-					stack.AddOrdered(order, myResources)
+				stack = client.NewStack(c, client.StackWorkers(cmd.Root().Int("workers")), client.StackFailFast())
+				stack.AddOrdered(order, myResources)
 
-					// Everything else came through the ensure above; the deleted
-					// instances are what the rebuild handed back unensured.
-					deleted := func(r client.Resource) bool { return !r.IsEnsured() }
+				// Everything else came through the ensure above; the deleted
+				// instances are what the rebuild handed back unensured.
+				deleted := func(r client.Resource) bool { return !r.IsEnsured() }
 
-					err = stack.ForActionF(client.ActionEnsure, deleted).Run(ctx, client.ActionEnsure, startOptions...)
-					if err != nil {
-						c.LogError("Ensuring the recreated instances", "error", err)
-						return errLogged.Wrap(err)
-					}
+				err = stack.ForActionF(client.ActionEnsure, deleted).Run(ctx, client.ActionEnsure, startOptions...)
+				if err != nil {
+					c.LogError("Ensuring the recreated instances", "error", err)
+					return errLogged.Wrap(err)
 				}
 			}
 
@@ -559,9 +558,10 @@ func builtServices(p *project.Project, args filterResourcesArgs) []string {
 	return services
 }
 
-// staleInstances returns the ensured instances running an image other than the
-// one their service holds now, sorted by Incus name.
-func staleInstances(resources map[string][]client.Resource) []client.Resource {
+// staleInstances returns the ensured instances created from an older service
+// config or, when pulled, running an image other than the one their service
+// holds now, sorted by Incus name.
+func staleInstances(resources map[string][]client.Resource, pulled bool) []client.Resource {
 	stale := []client.Resource{}
 
 	for _, res := range resources {
@@ -590,7 +590,7 @@ func staleInstances(resources map[string][]client.Resource) []client.Resource {
 				continue
 			}
 
-			if pulledImageChanged(info.Config["volatile.base_image"], image.State().IncusAlias) {
+			if instance.ConfigChanged() || pulled && pulledImageChanged(info.Config["volatile.base_image"], image.State().IncusAlias) {
 				stale = append(stale, instance)
 			}
 		}
