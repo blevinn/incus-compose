@@ -134,6 +134,10 @@ form.
 - `build` now works on macOS instead of erroring with "the build command is only
   available on linux". (by @tallica)
 
+- `ic-dns` now learns of a bridge network as soon as it is created, so an
+  instance on a new bridge is enriched with its interfaces on hosts without OVN.
+  (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed
