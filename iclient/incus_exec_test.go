@@ -35,8 +35,7 @@ func testInstance(t *testing.T, conn *Connection, project string, name string, c
 	cliConfig, err := ReadConfig("")
 	require.NoError(t, err)
 
-	registry, err := cliConfig.RemoteInfos("docker.io")
-	require.NoError(t, err)
+	registry := testRegistry(t, cliConfig)
 
 	// A fresh project's default profile carries no devices, so the root disk
 	// has to be named or Incus refuses with "No root device could be found".

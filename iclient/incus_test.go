@@ -2,6 +2,7 @@ package iclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,28 @@ func testConnection(t *testing.T) *Connection {
 	require.NoError(t, err)
 
 	return conn
+}
+
+// testRegistry resolves the docker.io remote, following whatever mirror the
+// Incus configuration points it at. Without one it is the stock OCI registry,
+// which is what `incus remote add docker.io https://docker.io --protocol=oci`
+// would register, so the tests need no change to the user's configuration.
+func testRegistry(t *testing.T, config *Config) *ConfigRemoteInfo {
+	t.Helper()
+
+	registry, err := config.RemoteInfos("docker.io")
+	if errors.Is(err, ErrConfigRemoteNotFound) {
+		return &ConfigRemoteInfo{
+			Name:     "docker.io",
+			Addrs:    []string{"https://docker.io"},
+			Protocol: "oci",
+			Public:   true,
+		}
+	}
+
+	require.NoError(t, err)
+
+	return registry
 }
 
 // transportOf digs out the transport a connection was built with.
