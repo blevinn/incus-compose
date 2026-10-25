@@ -15,6 +15,11 @@ form.
 
 ### Added
 
+- Instances carry a `user.label.incus-compose.config-hash` label with the hash
+  of their service. `up` recreates the drifted ones, `config --hash` prints the
+  hash of the current file, and `ps` marks changed instances (`config_changed`
+  in JSON). (by @tallica)
+
 - Disk and tmpfs mount targets that are symlinks in the container rootfs (common
   in `nix-containers` images such as `/etc/caddy` pointing into `/nix/store`)
   are now materialized as real directories or files before starting the

@@ -4,6 +4,7 @@
     "name": "web-1",
     "incus_name": "web-1",
     "image": "docker.io/alpine:edge",
-    "status": "Stopped"
+    "status": "Stopped",
+    "config_hash": "v1:7d6f76b2b9c89a02bd8cd3c341d5416a1af9442ffecac842c14d64feb217f25f"
   }
 ]
