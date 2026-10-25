@@ -1267,10 +1267,12 @@ func (c *GlobalClient) LockDirect(ctx context.Context, name string, stale time.D
 }
 
 // LockGlobalProject acquires the advisory lock for the global project, blocking until held.
+// Waiting for a held lock happens inside LockDirect, so what fails here is
+// setting up the volume, and that is retried a few times only.
 func (c *GlobalClient) LockGlobalProject(ctx context.Context) (func(), error) {
 	return retry.NewWithData[func()](
 		retry.Context(ctx),
-		retry.Attempts(0),
+		retry.Attempts(5),
 		retry.Delay(250*time.Millisecond),
 		retry.DelayType(retry.FixedDelay),
 		retry.LastErrorOnly(true),

@@ -138,6 +138,9 @@ form.
   instance on a new bridge is enriched with its interfaces on hosts without OVN.
   (by @tallica)
 
+- Taking the global lock gives up after five failed attempts with the underlying
+  error instead of retrying silently for ever. (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed
