@@ -144,6 +144,9 @@ form.
 - The client's project cache and hooks are safe to use from parallel workers; a
   race could drop a cached project or a debug hook. (by @tallica)
 
+- Taking an image lock creates the global project when it does not exist yet, so
+  a fresh server no longer hangs there. (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed

@@ -1238,7 +1238,7 @@ func (c *GlobalClient) LockDirect(ctx context.Context, name string, stale time.D
 		return nil, ErrDisconnected
 	}
 
-	sysClient, err := c.EnsureProject(c.config.GlobalProject)
+	sysClient, err := c.EnsureProject(c.config.GlobalProject, EnsureProjectWithCreate())
 	if err != nil {
 		return nil, fmt.Errorf("getting global project %q for lock: %w", c.config.GlobalProject, err)
 	}
