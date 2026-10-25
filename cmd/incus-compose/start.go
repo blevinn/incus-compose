@@ -33,6 +33,8 @@ func start(ctx context.Context, p *project.Project, c *client.Client, args start
 	// We start all resources, just ignore that warning but let progress know them (so add before - LIFO - progress runs before).
 	c.IgnoreError(client.ActionStart, client.ErrRunning)
 	c.IgnoreError(client.ActionEnsure, client.ErrNotFound)
+	// The pre_start runners stop themselves, which may find them not running.
+	c.IgnoreError(client.ActionStop, client.ErrNotRunning)
 
 	if !args.Debug {
 		progress := newProgressRenderer(args.Writer, noColor, isatty.IsTerminal(os.Stdout.Fd()))

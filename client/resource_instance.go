@@ -1095,7 +1095,6 @@ func (r *Instance) Run(ctx context.Context, opts ...Option) error {
 
 	cleanup := func() {
 		cleanCtx := context.WithoutCancel(ctx)
-		r.client.IgnoreError(ActionStop, ErrNotRunning)
 		_ = RunAction(cleanCtx, r, ActionStop, OptionForce(), OptionNoHealthd())
 	}
 
