@@ -422,7 +422,7 @@ func newUpCommand() *cli.Command {
 			// the ones the ensure above found on the previous fingerprint are
 			// torn down and made from the new one, as are the ones created from
 			// an older service config.
-			stale := staleInstances(myResources, pullMode == client.PullAlways)
+			stale := staleInstances(myResources, pullMode)
 			if len(stale) > 0 {
 				c.LogDebug("Recreating outdated instances", "instances", stale)
 
@@ -559,9 +559,9 @@ func builtServices(p *project.Project, args filterResourcesArgs) []string {
 }
 
 // staleInstances returns the ensured instances created from an older service
-// config or, when pulled, running an image other than the one their service
-// holds now, sorted by Incus name.
-func staleInstances(resources map[string][]client.Resource, pulled bool) []client.Resource {
+// config or, under PullAlways, running an image other than the one their
+// service holds now, sorted by Incus name.
+func staleInstances(resources map[string][]client.Resource, pullMode client.PullMode) []client.Resource {
 	stale := []client.Resource{}
 
 	for _, res := range resources {
@@ -590,7 +590,7 @@ func staleInstances(resources map[string][]client.Resource, pulled bool) []clien
 				continue
 			}
 
-			if instance.ConfigChanged() || pulled && pulledImageChanged(info.Config["volatile.base_image"], image.State().IncusAlias) {
+			if instance.ConfigChanged() || pullMode == client.PullAlways && pulledImageChanged(info.Config["volatile.base_image"], image.State().IncusAlias) {
 				stale = append(stale, instance)
 			}
 		}
