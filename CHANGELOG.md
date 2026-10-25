@@ -124,12 +124,14 @@ form.
   (`shared.HealthIgnoreKey`) tag and check; instance watching is strictly opt-in
   via `user.healthcheck.enabled`. (by @jochumdev)
 
-## [v1.3.5] - 2026-10-17
-
 ### Fixed
 
 - `build` now works on macOS instead of erroring with "the build command is only
   available on linux". (by @tallica)
+
+## [v1.3.5] - 2026-10-17
+
+### Fixed
 
 - Network `aliases` are now flushed to `raw.dnsmasq` when all services in a
   project set `container_name` equal to their service key. Previously, DNS alias
