@@ -1601,7 +1601,7 @@ func TestWantsWhatItActsOnItself(t *testing.T) {
 
 	got := New(slog.Default()).Wants()
 
-	require.Len(t, got, 3)
+	require.Len(t, got, 5)
 
 	for _, want := range got {
 		assert.Zero(t, want.Enrich, "the enricher asked to be enriched")
@@ -1614,6 +1614,12 @@ func TestWantsWhatItActsOnItself(t *testing.T) {
 	assert.False(t, got[1].Debounce, "a delete collapsed into a burst is a delete lost")
 
 	assert.Equal(t, incusapi.EventLifecycleNetworkCreated, got[2].Action)
+
+	assert.Equal(t, incusapi.EventLifecycleNetworkDeleted, got[3].Action)
+	assert.False(t, got[3].Debounce, "a delete collapsed into a burst is a delete lost")
+
+	assert.Equal(t, incusapi.EventLifecycleNetworkRenamed, got[4].Action)
+	assert.False(t, got[4].Debounce, "a rename collapsed into a burst is a rename lost")
 }
 
 // TestTheFleetIsWrittenOnTheWayDown: what the enricher held when it stopped is

@@ -147,6 +147,9 @@ form.
 - Taking an image lock creates the global project when it does not exist yet, so
   a fresh server no longer hangs there. (by @tallica)
 
+- `ic-dns` drops a deleted or renamed network when it happens instead of at the
+  next sweep. (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed
