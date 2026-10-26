@@ -2,6 +2,7 @@ package iclient
 
 import (
 	"context"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -30,6 +31,23 @@ func (c *Connection) HasExtension(ctx context.Context, extension string) (bool, 
 	}
 
 	return slices.Contains(server.APIExtensions, extension), nil
+}
+
+// IsIncusOS reports whether the server runs IncusOS, by asking incusd's /os
+// proxy, which only answers there.
+func (c *Connection) IsIncusOS(ctx context.Context) (bool, error) {
+	_, _, err := c.doPath(ctx, http.MethodGet, "/os/1.0", nil, "")
+	if err == nil {
+		return true, nil
+	}
+
+	// incusd's own 400 on the proxy means not IncusOS (cmd/incusd/api_os.go),
+	// and a server without the proxy (404) predates IncusOS.
+	if api.StatusErrorCheck(err, http.StatusBadRequest, http.StatusNotFound) {
+		return false, nil
+	}
+
+	return false, err
 }
 
 // GetConnectionInfo describes how this connection reaches the server.

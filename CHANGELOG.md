@@ -131,6 +131,10 @@ form.
 
 ### Fixed
 
+- On a server without OVN, `up` and the `healthd`/`dns` commands no longer spend
+  about two seconds detecting that, several times per command, and OVN networks
+  in projects other than `default` are now found. (by @tallica)
+
 - `build` now works on macOS instead of erroring with "the build command is only
   available on linux". (by @tallica)
 

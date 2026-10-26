@@ -54,6 +54,50 @@ func TestIncusHasExtension(t *testing.T) {
 	require.False(t, has)
 }
 
+func TestIncusIsIncusOS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("IncusOS answers through the proxy", func(t *testing.T) {
+		t.Parallel()
+
+		conn, seen := recordingServer(t, `{}`)
+
+		incusOS, err := conn.IsIncusOS(t.Context())
+		require.NoError(t, err)
+		require.True(t, incusOS)
+		require.Equal(t, []string{"/os/1.0"}, seen.uris())
+	})
+
+	t.Run("refused by incusd", func(t *testing.T) {
+		t.Parallel()
+
+		conn := rawServer(t, http.StatusBadRequest, `{"type":"error","error_code":400,"error":"System isn't running IncusOS"}`)
+
+		incusOS, err := conn.IsIncusOS(t.Context())
+		require.NoError(t, err)
+		require.False(t, incusOS)
+	})
+
+	t.Run("server without the proxy", func(t *testing.T) {
+		t.Parallel()
+
+		conn := rawServer(t, http.StatusNotFound, `{"type":"error","error_code":404,"error":"not found"}`)
+
+		incusOS, err := conn.IsIncusOS(t.Context())
+		require.NoError(t, err)
+		require.False(t, incusOS)
+	})
+
+	t.Run("forbidden", func(t *testing.T) {
+		t.Parallel()
+
+		conn := rawServer(t, http.StatusForbidden, `{"type":"error","error_code":403,"error":"not authorized"}`)
+
+		_, err := conn.IsIncusOS(t.Context())
+		require.Error(t, err)
+	})
+}
+
 func TestIncusGetConnectionInfo(t *testing.T) {
 	t.Parallel()
 
