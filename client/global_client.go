@@ -204,6 +204,11 @@ type GlobalClient struct {
 	// networkTypes caches each network's Incus type, keyed by project/name.
 	networkTypes sync.Map
 
+	// DetectOVN creates a throwaway network when the server has no OVN network,
+	// which takes seconds to fail where OVN is not set up, so ask once.
+	ovnOnce      sync.Once
+	ovnSupported bool
+
 	// hooksMu guards the three hooks below: every project client built stacks
 	// its own debug hooks on them, and workers build project clients
 	// concurrently.
@@ -646,19 +651,42 @@ func (c *GlobalClient) InvalidateNetworkType(project string, name string) {
 	c.networkTypes.Delete(project + "/" + name)
 }
 
-// DetectOVN reports whether the server supports OVN networks.
+// DetectOVN reports whether the server supports OVN networks. The answer is
+// read once per client.
 func (c *GlobalClient) DetectOVN() (bool, error) {
+	c.ovnOnce.Do(func() {
+		c.ovnSupported = c.probeOVN()
+	})
+
+	return c.ovnSupported, nil
+}
+
+func (c *GlobalClient) probeOVN() bool {
 	if !c.HasExtension(shared.Incus75Extension) {
-		return false, nil
+		return false
 	}
 
-	// Cheap check: scan all network names for any active OVN network.
-	names, err := c.incus.GetNetworkNamesAllProjects(c.ctx)
-	if err == nil {
-		for _, name := range names {
-			net, _, getErr := c.incus.GetNetwork(c.ctx, "", name)
-			if getErr == nil && net.Type == "ovn" && net.Status == "Created" {
-				return true, nil
+	// Cheap checks first: the probe below takes seconds to fail where OVN is
+	// not set up. One listing of every network, host interfaces included.
+	networks, err := c.incus.GetNetworksAllProjects(c.ctx)
+	if err == nil && slices.ContainsFunc(networks, func(n incusApi.Network) bool { return n.Type == "ovn" && n.Status == "Created" }) {
+		return true
+	}
+
+	// Incus attaches OVN ports to the integration bridge and never creates it
+	// (ovn-controller does), so a host without it cannot run OVN. IncusOS lists
+	// host interfaces by role, so the bridge may not show there.
+	incusOS, osErr := c.incus.IsIncusOS(c.ctx)
+	if err == nil && osErr == nil && !incusOS {
+		server, _, serverErr := c.incus.GetServer(c.ctx)
+		if serverErr == nil {
+			bridge := server.Config["network.ovn.integration_bridge"]
+			if bridge == "" {
+				bridge = "br-int"
+			}
+
+			if !slices.ContainsFunc(networks, func(n incusApi.Network) bool { return n.Name == bridge }) {
+				return false
 			}
 		}
 	}
@@ -675,7 +703,8 @@ func (c *GlobalClient) DetectOVN() (bool, error) {
 		},
 	})
 	if createErr != nil {
-		return false, nil //nolint:nilerr // creation failure means the server does not support OVN
+		// Creation failure means the server does not support OVN.
+		return false
 	}
 
 	deleteErr := c.incus.DeleteNetwork(c.ctx, "default", probeName)
@@ -683,7 +712,7 @@ func (c *GlobalClient) DetectOVN() (bool, error) {
 		c.LogWarn("Failed to delete OVN probe network", "network", probeName, "error", deleteErr)
 	}
 
-	return true, nil
+	return true
 }
 
 // ProjectConfig returns the Incus project's config, empty if it does not exist.

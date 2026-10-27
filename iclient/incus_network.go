@@ -50,6 +50,23 @@ func (c *Connection) GetNetworkNamesAllProjects(ctx context.Context) ([]string, 
 	return resourceNames(incusNetworksPath, uris)
 }
 
+// GetNetworksAllProjects returns every network across all projects, each one
+// whole, in a single request.
+func (c *Connection) GetNetworksAllProjects(ctx context.Context) ([]api.Network, error) {
+	networks := []api.Network{}
+
+	query := url.Values{}
+	query.Set("recursion", "1")
+	query.Set("all-projects", "true")
+
+	_, err := c.getStruct(ctx, "", incusNetworksPath, query, &networks)
+	if err != nil {
+		return nil, err
+	}
+
+	return networks, nil
+}
+
 // GetNetworks returns every network, each one whole.
 func (c *Connection) GetNetworks(ctx context.Context, project string) ([]api.Network, error) {
 	networks := []api.Network{}

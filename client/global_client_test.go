@@ -1,8 +1,11 @@
 package client
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
+	incusApi "github.com/lxc/incus/v7/shared/api"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,4 +75,33 @@ func TestDetectOVN_Requires75Extension(t *testing.T) {
 	supported, err := gc.DetectOVN()
 	require.NoError(t, err)
 	require.False(t, supported)
+}
+
+// TestDetectOVNMatchesProbe holds the cheap checks to the throwaway OVN network
+// they skip: CI runs it against servers with OVN and without.
+func TestDetectOVNMatchesProbe(t *testing.T) {
+	t.Parallel()
+	skipLocal(t)
+	ctx := t.Context()
+
+	gc, err := NewTestClient(testContext(t))
+	require.NoError(t, err)
+
+	got, err := gc.DetectOVN()
+	require.NoError(t, err)
+
+	conn, err := gc.Connection()
+	require.NoError(t, err)
+
+	name := fmt.Sprintf("ic-probe-test-%x", time.Now().UnixNano())
+	createErr := conn.CreateNetwork(ctx, "default", incusApi.NetworksPost{
+		Name:       name,
+		Type:       "ovn",
+		NetworkPut: incusApi.NetworkPut{Config: map[string]string{"network": "none"}},
+	})
+	if createErr == nil {
+		require.NoError(t, conn.DeleteNetwork(ctx, "default", name))
+	}
+
+	require.Equal(t, createErr == nil, got, "probe error: %v", createErr)
 }

@@ -33,7 +33,8 @@ func sidecarEnsureNetwork(ctx context.Context, c *client.Client, ref sidecarNetw
 	switch {
 	case ref.deflt:
 		cfg := &client.NetworkConfig{OverrideName: ref.incusName}
-		if ovn, _ := c.Global().DetectOVN(); ovn {
+		// The project already decided at creation whether it has OVN networks.
+		if c.NetworkType() == "ovn" {
 			cfg.Type = "ovn"
 		}
 
