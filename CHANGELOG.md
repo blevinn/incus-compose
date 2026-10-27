@@ -11,6 +11,14 @@ final version), and the beta suffix gained a dot (`beta.16`) from beta.16 onward
 for correct semver ordering. Headings below preserve each release's announced
 form.
 
+## [Unreleased]
+
+### Fixed
+
+- Digest-pinned OCI references and long cache aliases fit Incus's 64-character
+  image alias limit without truncating the registry reference or digest. (by
+  @blevinn)
+
 ## [v1.3.4] - 2026-09-17
 
 ### Added
