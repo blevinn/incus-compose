@@ -294,6 +294,16 @@ func (p *Plugin) Wants() []iutil.Want {
 
 		// Not collapsed: a delete lost in a burst is a delete lost.
 		{Action: incusapi.EventLifecycleProfileDeleted},
+
+		// A bridge raises no update after it is created, so without this a NIC
+		// on a new one stays unplaced until the next sweep.
+		{Action: incusapi.EventLifecycleNetworkCreated},
+
+		// Not collapsed: a delete or rename lost in a burst leaves the network
+		// in the state, and the instances on it filed under a key nothing
+		// describes.
+		{Action: incusapi.EventLifecycleNetworkDeleted},
+		{Action: incusapi.EventLifecycleNetworkRenamed},
 	}
 }
 

@@ -75,8 +75,7 @@ func TestIncusImagePullAndCopy(t *testing.T) {
 	config, err := ReadConfig("")
 	require.NoError(t, err)
 
-	registry, err := config.RemoteInfos("docker.io")
-	require.NoError(t, err)
+	registry := testRegistry(t, config)
 	require.Equal(t, "oci", registry.Protocol, "docker.io is not an OCI remote here")
 
 	// Hop A: registry to the cache project. The alias is fully qualified, a

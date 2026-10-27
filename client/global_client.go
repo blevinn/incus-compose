@@ -178,8 +178,12 @@ type GlobalClient struct {
 
 	stdout    io.Writer
 	stderr    *SwapWriter
-	projects  []*Client
 	cliConfig *iclient.Config
+
+	// projectsMu guards projects: workers ensure projects concurrently. It is
+	// not mu, which EnsureProject takes through IsConnected.
+	projectsMu sync.Mutex
+	projects   []*Client
 
 	// mu guards the connection state below; Connect writes it while workers read it.
 	mu sync.Mutex
@@ -199,6 +203,11 @@ type GlobalClient struct {
 
 	// networkTypes caches each network's Incus type, keyed by project/name.
 	networkTypes sync.Map
+
+	// hooksMu guards the three hooks below: every project client built stacks
+	// its own debug hooks on them, and workers build project clients
+	// concurrently.
+	hooksMu sync.Mutex
 
 	// hookBefore is called hookBefore any action.
 	hookBefore func(ctx context.Context, action Action, r Resource, args Options, err error) error
@@ -834,12 +843,15 @@ func (c *GlobalClient) EnsureProject(name string, opts ...EnsureProjectOption) (
 		opt(options)
 	}
 
-	// Check if already known
-	for _, p := range c.projects {
-		if p != nil && p.project == name {
-			return p, nil
-		}
+	c.projectsMu.Lock()
+	known := slices.IndexFunc(c.projects, func(p *Client) bool { return p != nil && p.project == name })
+	if known >= 0 {
+		p := c.projects[known]
+		c.projectsMu.Unlock()
+
+		return p, nil
 	}
+	c.projectsMu.Unlock()
 
 	p, err := c.getProject(name)
 	if err == nil {
@@ -925,30 +937,26 @@ func (c *GlobalClient) DeleteProject(name string, force bool) error {
 	}
 
 	// Delete networks - they are global, not project-scoped
-	for _, p := range c.projects {
-		if p.project == name {
-			// Delete networks first - they are global, not project-scoped
-			networks, err := ByKind[*Network](p.resources.all(), KindNetwork)
-			if err != nil {
-				c.LogWarn("Deleting networks", "error", err)
-				continue
-			}
-
-			for _, n := range networks {
-				err = RunAction(c.ctx, n, ActionDelete, OptionForce())
-				if err != nil {
-					c.LogWarn("Deleting network", "network", n, "error", err)
-				}
-			}
-			break
-		}
+	c.projectsMu.Lock()
+	cached := slices.IndexFunc(c.projects, func(p *Client) bool { return p.project == name })
+	var deleted *Client
+	if cached >= 0 {
+		deleted = c.projects[cached]
+		c.projects = slices.Delete(c.projects, cached, cached+1)
 	}
+	c.projectsMu.Unlock()
 
-	// Remove from cache
-	for i, p := range c.projects {
-		if p.project == name {
-			c.projects = append(c.projects[:i], c.projects[i+1:]...)
-			break
+	if deleted != nil {
+		networks, err := ByKind[*Network](deleted.resources.all(), KindNetwork)
+		if err != nil {
+			c.LogWarn("Deleting networks", "error", err)
+		}
+
+		for _, n := range networks {
+			err = RunAction(c.ctx, n, ActionDelete, OptionForce())
+			if err != nil {
+				c.LogWarn("Deleting network", "network", n, "error", err)
+			}
 		}
 	}
 
@@ -1042,6 +1050,9 @@ func parsePercent(s string) int {
 // AddHookBefore adds a hook that will be executed before any action (FIFO order).
 // You may use it for abort control.
 func (c *GlobalClient) AddHookBefore(hook func(ctx context.Context, action Action, r Resource, args Options, err error) error) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
+
 	prevHook := c.hookBefore
 	newHook := func(ctx context.Context, action Action, r Resource, args Options, err error) error {
 		// Run previous hooks FIRST (FIFO)
@@ -1057,6 +1068,9 @@ func (c *GlobalClient) AddHookBefore(hook func(ctx context.Context, action Actio
 
 // AddHookAfter adds a hook that will be executed after any action (LIFO order).
 func (c *GlobalClient) AddHookAfter(hook func(ctx context.Context, action Action, r Resource, args Options, err error) error) {
+	c.hooksMu.Lock()
+	defer c.hooksMu.Unlock()
+
 	prevHook := c.hookAfter
 	newHook := func(ctx context.Context, action Action, r Resource, args Options, err error) error {
 		// Run new hook FIRST, then pass result to previous hooks (LIFO)
@@ -1224,7 +1238,7 @@ func (c *GlobalClient) LockDirect(ctx context.Context, name string, stale time.D
 		return nil, ErrDisconnected
 	}
 
-	sysClient, err := c.EnsureProject(c.config.GlobalProject)
+	sysClient, err := c.EnsureProject(c.config.GlobalProject, EnsureProjectWithCreate())
 	if err != nil {
 		return nil, fmt.Errorf("getting global project %q for lock: %w", c.config.GlobalProject, err)
 	}
@@ -1267,10 +1281,12 @@ func (c *GlobalClient) LockDirect(ctx context.Context, name string, stale time.D
 }
 
 // LockGlobalProject acquires the advisory lock for the global project, blocking until held.
+// Waiting for a held lock happens inside LockDirect, so what fails here is
+// setting up the volume, and that is retried a few times only.
 func (c *GlobalClient) LockGlobalProject(ctx context.Context) (func(), error) {
 	return retry.NewWithData[func()](
 		retry.Context(ctx),
-		retry.Attempts(0),
+		retry.Attempts(5),
 		retry.Delay(250*time.Millisecond),
 		retry.DelayType(retry.FixedDelay),
 		retry.LastErrorOnly(true),

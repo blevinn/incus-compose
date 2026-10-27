@@ -77,6 +77,10 @@ func (c *GlobalClient) newProjectClient(name, incusName string, created bool, pr
 	config := c.config
 	config.DescriptionFormat = fmt.Sprintf(config.DescriptionFormat, name) + ":%s"
 
+	c.hooksMu.Lock()
+	hookBefore, hookAfter, hookOperation := c.hookBefore, c.hookAfter, c.hookOperation
+	c.hooksMu.Unlock()
+
 	cp := &Client{
 		ctx:           c.ctx,
 		globalClient:  c,
@@ -89,10 +93,10 @@ func (c *GlobalClient) newProjectClient(name, incusName string, created bool, pr
 		imageCache:    c.imageCache,
 		logger:        c.logger.With("project", name),
 
-		hookBefore: c.hookBefore,
-		hookAfter:  c.hookAfter,
+		hookBefore: hookBefore,
+		hookAfter:  hookAfter,
 
-		hookOperation: c.hookOperation,
+		hookOperation: hookOperation,
 
 		hookConnected: func(err error) error { return err },
 		hookDone:      func(err error) error { return err },
@@ -105,7 +109,9 @@ func (c *GlobalClient) newProjectClient(name, incusName string, created bool, pr
 		cp.LogDebug("Running on network type", "type", cp.NetworkType())
 	}
 
+	c.projectsMu.Lock()
 	c.projects = append(c.projects, cp)
+	c.projectsMu.Unlock()
 
 	if c.IsDebugging() {
 		// Debug logging hooks

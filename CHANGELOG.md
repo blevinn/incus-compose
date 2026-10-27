@@ -134,6 +134,22 @@ form.
 - `build` now works on macOS instead of erroring with "the build command is only
   available on linux". (by @tallica)
 
+- `ic-dns` now learns of a bridge network as soon as it is created, so an
+  instance on a new bridge is enriched with its interfaces on hosts without OVN.
+  (by @tallica)
+
+- Taking the global lock gives up after five failed attempts with the underlying
+  error instead of retrying silently for ever. (by @tallica)
+
+- The client's project cache and hooks are safe to use from parallel workers; a
+  race could drop a cached project or a debug hook. (by @tallica)
+
+- Taking an image lock creates the global project when it does not exist yet, so
+  a fresh server no longer hangs there. (by @tallica)
+
+- `ic-dns` drops a deleted or renamed network when it happens instead of at the
+  next sweep. (by @tallica)
+
 ## [v1.3.5] - 2026-10-17
 
 ### Fixed

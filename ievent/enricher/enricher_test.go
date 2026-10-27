@@ -969,7 +969,6 @@ func TestInstanceFilter(t *testing.T) {
 	served := h.next()
 	require.Equal(t, "served", served.Name())
 	require.NotNil(t, served.Instance())
-	assert.NotNil(t, h.p.state.instance("p", "served"))
 
 	h.send(incusapi.EventLifecycleInstanceStarted, "p", "ignored")
 
@@ -979,6 +978,11 @@ func TestInstanceFilter(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
+	// The state belongs to Run's goroutine, so it is only safe to look at once
+	// Run has returned.
+	h.stop()
+
+	assert.NotNil(t, h.p.state.instance("p", "served"))
 	assert.Nil(t, h.p.state.instance("p", "ignored"))
 }
 
@@ -1004,7 +1008,6 @@ func TestInstanceFilterDropWhenUnserved(t *testing.T) {
 	ev := h.next()
 	require.Equal(t, "inst-1", ev.Name())
 	require.NotNil(t, ev.Instance())
-	assert.NotNil(t, h.p.state.instance("p", "inst-1"))
 
 	serve.Store(false)
 	h.send(incusapi.EventLifecycleInstanceUpdated, "p", "inst-1")
@@ -1012,7 +1015,6 @@ func TestInstanceFilterDropWhenUnserved(t *testing.T) {
 	evUpdate := h.next()
 	require.Equal(t, "inst-1", evUpdate.Name())
 	assert.Nil(t, evUpdate.Instance())
-	assert.Nil(t, h.p.state.instance("p", "inst-1"))
 
 	h.send(incusapi.EventLifecycleInstanceUpdated, "p", "inst-1")
 	select {
@@ -1020,6 +1022,12 @@ func TestInstanceFilterDropWhenUnserved(t *testing.T) {
 		t.Fatalf("unexpected event after instance dropped: %v", ev)
 	case <-time.After(50 * time.Millisecond):
 	}
+
+	// The state belongs to Run's goroutine, so it is only safe to look at once
+	// Run has returned.
+	h.stop()
+
+	assert.Nil(t, h.p.state.instance("p", "inst-1"))
 }
 
 // TestFanOutOverAnUnchangedFleetEmitsNothing is what the archive is for: a network
@@ -1601,7 +1609,7 @@ func TestWantsWhatItActsOnItself(t *testing.T) {
 
 	got := New(slog.Default()).Wants()
 
-	require.Len(t, got, 2)
+	require.Len(t, got, 5)
 
 	for _, want := range got {
 		assert.Zero(t, want.Enrich, "the enricher asked to be enriched")
@@ -1612,6 +1620,14 @@ func TestWantsWhatItActsOnItself(t *testing.T) {
 
 	assert.Equal(t, incusapi.EventLifecycleProfileDeleted, got[1].Action)
 	assert.False(t, got[1].Debounce, "a delete collapsed into a burst is a delete lost")
+
+	assert.Equal(t, incusapi.EventLifecycleNetworkCreated, got[2].Action)
+
+	assert.Equal(t, incusapi.EventLifecycleNetworkDeleted, got[3].Action)
+	assert.False(t, got[3].Debounce, "a delete collapsed into a burst is a delete lost")
+
+	assert.Equal(t, incusapi.EventLifecycleNetworkRenamed, got[4].Action)
+	assert.False(t, got[4].Debounce, "a rename collapsed into a burst is a rename lost")
 }
 
 // TestTheFleetIsWrittenOnTheWayDown: what the enricher held when it stopped is

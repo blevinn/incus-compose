@@ -355,18 +355,22 @@ func newE2ESuite(t *testing.T) *e2eSuite {
 	if remote != "" {
 		s.export("INCUS_REMOTE", remote)
 
+		// Not skipped on error: without the fingerprint ic-dns exits at start,
+		// which Incus reports as "Invalid PID -1" and hides this failure.
 		conf, err := iclient.ReadConfig("")
-		if err == nil {
-			info, err := conf.RemoteInfos(remote)
-			if err == nil {
-				conn, err := iclient.NewConnection(info)
-				if err == nil {
-					connInfo, err := conn.GetConnectionInfo(t.Context())
-					if err == nil && connInfo.CertificateFingerprint != "" {
-						s.export("DNS_SERVER_FINGERPRINT", connInfo.CertificateFingerprint)
-					}
-				}
-			}
+		require.NoError(t, err)
+
+		info, err := conf.RemoteInfos(remote)
+		require.NoError(t, err)
+
+		conn, err := iclient.NewConnection(info)
+		require.NoError(t, err)
+
+		connInfo, err := conn.GetConnectionInfo(t.Context())
+		require.NoError(t, err)
+
+		if connInfo.CertificateFingerprint != "" {
+			s.export("DNS_SERVER_FINGERPRINT", connInfo.CertificateFingerprint)
 		}
 	}
 
