@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"io"
@@ -235,7 +236,7 @@ func newImage(c *Client, name string, configGetter Config) (*Image, error) {
 	img := &Image{
 		BaseResource: NewBaseResource(KindImage, name, PriorityImage),
 		client:       c,
-		incusName:    incusName,
+		incusName:    ImageAlias(incusName),
 		Config:       *config,
 		remote:       remote,
 		image:        image,
@@ -255,6 +256,17 @@ func (r *Image) String() string {
 // IncusName returns the image alias name used in Incus.
 func (r *Image) IncusName() string {
 	return r.incusName
+}
+
+// ImageAlias maps a normalized image reference to a bounded local Incus alias.
+func ImageAlias(name string) string {
+	if len(name) <= 64 {
+		return name
+	}
+
+	// Preserve the full hash: truncating a reference can merge distinct digests.
+	digest := sha256.Sum256([]byte(name))
+	return "ic-image-" + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest[:]))
 }
 
 // resolvePlatform reads a platform request, answering the cache alias key and
@@ -287,7 +299,7 @@ func (r *Image) requestedPlatform() string {
 // part of the key because a stored alias resolves to one fingerprint, while the
 // store is shared across projects and, on a cluster, across architectures.
 func (r *Image) cacheAlias() string {
-	return r.incusName + "/" + r.platform
+	return ImageAlias(r.incusName + "/" + r.platform)
 }
 
 // resolveArch fixes the architecture this image is wanted for. An empty

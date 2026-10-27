@@ -15,6 +15,10 @@ form.
 
 ### Fixed
 
+- Digest-pinned OCI references and long cache aliases fit Incus's 64-character
+  image alias limit without truncating the registry reference or digest. (by
+  @blevinn)
+
 - Network `aliases` are now flushed to `raw.dnsmasq` when all services in a
   project set `container_name` equal to their service key. Previously, DNS alias
   flushing was only triggered during instance address registration, which was
